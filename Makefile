@@ -1,18 +1,24 @@
+CC      ?= cc
+CFLAGS  ?= -std=c89
 
-bootstrap:
-
-		cc -std=c89 -o ptc-new generated/ptc.c
+.PHONY: all bootstrap test clean
 
 all:
-#		fpc -Miso ptc.pas
-		cc -std=c89 -o ptc generated/ptc.c
-		./ptc < ptc.p > ptc-new.c
-		cc -std=c89 -o ptc-new ptc-new.c
-		md5sum ptc-new.c generated/ptc.c
-		md5sum ptc ptc-new
+	$(CC) $(CFLAGS) -x c -o ptc - < generated/ptc.c
+	./ptc < modified/ptc.p > ptc-new.c
+	cmp generated/ptc.c ptc-new.c
+	$(CC) $(CFLAGS) -x c -o ptc-new - < ptc-new.c
+	cmp ptc ptc-new
+	md5sum generated/ptc.c ptc-new.c
+	md5sum ptc ptc-new
 
-test:
-		./ptc-new < test.pas > test.c
-		cc -std=gnu89 -o test test.c
-		./test
+bootstrap:
+	$(CC) $(CFLAGS) -x c -o ptc-new - < generated/ptc.c
 
+test: ptc-new
+	./ptc-new < test.pas > test.c
+	$(CC) $(CFLAGS) -o test test.c
+	./test
+
+clean:
+	rm -f ptc ptc-new ptc-new.c test test.c

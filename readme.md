@@ -1,4 +1,4 @@
-# ptc — historical Pascal-to-C translator
+# paskalmaro: ptc — historical Pascal-to-C translator
 
 This repository preserves and maintains **ptc**, the Pascal-to-C translator written by Per Bergsten in 1987.
 
@@ -10,7 +10,93 @@ The repository contains:
 * `modified/` — the original source with those patches applied;
 * `generated/` — C source generated from the modified translator, where applicable.
 
-The original source is kept separately so that it remains possible to inspect, compile and redistribute the historical program exactly as it was released.
+The original source is kept separately so that it remains possible to inspect, compile and redistribute the historical program exactly as it was released. For details see below in this file.
+
+## Building
+
+PTC is self-hosting. The repository includes a C translation of the maintained compiler in `generated/ptc.c`.
+
+To build a compiler directly from the generated C source:
+
+```sh
+make bootstrap
+```
+
+This produces `ptc-new`.
+
+To perform the full self-hosting build and comparison:
+
+```sh
+make
+```
+
+The build performs these steps:
+
+```text
+generated/ptc.c  --C compiler-->  ptc
+ptc.p            --ptc--------->  ptc-new.c
+ptc-new.c        --C compiler-->  ptc-new
+```
+
+It then prints checksums for the generated C files and compiler executables.
+
+The generated compiler source uses C89-style C and is built with:
+
+```sh
+cc -std=c89 -o ptc generated/ptc.c
+```
+
+## Using PTC
+
+PTC reads Pascal source from standard input and writes C source to standard output:
+
+```sh
+./ptc < program.pas > program.c
+```
+
+Compile the generated C with a C compiler:
+
+```sh
+cc -std=c89 -o program program.c
+```
+
+Then run the resulting program:
+
+```sh
+./program
+```
+
+Compiler diagnostics are written to standard error, so they remain separate from the generated C output.
+
+Programs that use the predefined standard files must declare them in the program heading. For example:
+
+```pascal
+program Example(output);
+```
+
+or, when both standard input and standard output are used:
+
+```pascal
+program Example(input, output);
+```
+
+The generated C includes the runtime definitions it needs. The old `ptc_runtime.h` compatibility header is no longer required.
+
+## Testing
+
+To translate and compile the included test program:
+
+```sh
+make test
+```
+
+The test target uses the self-hosted compiler to translate `test.pas`, compiles the resulting `test.c`, and creates the `test` executable.
+
+Run it with:
+
+```sh
+./test
+```
 
 ## Copyright and original distribution terms
 

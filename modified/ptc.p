@@ -371,6 +371,10 @@ type
                 tnext,                  (* ptr to next node in a list   *)
                 ttype,                  (* pointer to nodes type        *)
                 tup     : treeptr;      (* ptr to parent node           *)
+                tline,                  (* source line of this node      *)
+                tcol    : integer;      (* source column of this node    *)
+                tsemchecked,            (* semantic type already checked *)
+                tsemchecking : boolean; (* semantic type check in progress *)
                 case tt : treetyp of
                   npredef:              (* predefined object decl       *)
                     (
@@ -628,11 +632,13 @@ type
                   nderef,               (* ^ (ptr dereference)  *)
                   nnot,                 (* not                  *)
                   nset,                 (* [ ] (set constr)     *)
-                  nuplus,               (* +                    *)
+                  nuplus,               (* + or parentheses     *)
                   numinus:              (* -                    *)
                     (
                         texps:          (* operand expression   *)
-                                treeptr
+                                treeptr;
+                        tuplusop:       (* true for unary plus, false for () *)
+                                boolean
                     );
 
                   nid,                  (* identifier in decl or stmt   *)
@@ -682,7 +688,12 @@ type
                 enew,           esetbase,       esetsize,       eoverflow,
                 etree,          etag,           euprconf,       easgnconf,
                 ecmpconf,       econfconf,      evrntfile,      evarfile,
-                emanymachs,     ebadmach,       eprconf
+                emanymachs,     ebadmach,       eprconf,
+                easgntype,       eoperand,       eargcount,      eargtype,
+                efunrtype,       eindex,         enotrecord,     enotpointer,
+                eforctrl,        eboolxp,        ecasetype,      edupcase,
+                enofunresult,    eprocexpr,      eidkind,        etypeexpected,
+                econstexpected,  ecalltarget,    efuncstmt,      ebadrange
         );
 
         machdefstr = packed array [ 1 .. machdeflen ] of char;
@@ -842,6 +853,46 @@ begin
                 message(inter, 'Bad name for machine integer type');
           eprconf:
                 message(restr, 'Cannot write conformant arrays');
+          easgntype:
+                message(user, 'Incompatible types in assignment');
+          eoperand:
+                message(user, 'Invalid operand type for operator');
+          eargcount:
+                message(user, 'Wrong number of arguments');
+          eargtype:
+                message(user, 'Incompatible argument type');
+          efunrtype:
+                message(user, 'Invalid function result type');
+          eindex:
+                message(user, 'Invalid array index or indexed object');
+          enotrecord:
+                message(user, 'Field selection requires a record');
+          enotpointer:
+                message(user, 'Dereference requires a pointer or file');
+          eforctrl:
+                message(user, 'Invalid for control variable or bounds');
+          eboolxp:
+                message(user, 'Boolean expression required');
+          ecasetype:
+                message(user, 'Invalid case selector or label type');
+          edupcase:
+                message(user, 'Duplicate case label');
+          enofunresult:
+                message(user, 'Function result is never assigned');
+          eprocexpr:
+                message(user, 'Procedure call used as an expression');
+          eidkind:
+                message(user, 'Identifier used in an invalid context');
+          etypeexpected:
+                message(user, 'Type identifier expected');
+          econstexpected:
+                message(user, 'Constant expected');
+          ecalltarget:
+                message(user, 'Called identifier is not a subroutine');
+          efuncstmt:
+                message(user, 'Function call used as a statement');
+          ebadrange:
+                message(user, 'Invalid subrange bounds');
         end;(* case *)
         if lastline <> 0 then
             begin
@@ -2154,6 +2205,12 @@ begin
         tp^.tnext := nil;
         tp^.tup := nil;
         tp^.ttype := nil;
+        tp^.tline := lastline;
+        tp^.tcol := lastcol;
+        tp^.tsemchecked := false;
+        tp^.tsemchecking := false;
+        if nt in [nderef, nnot, nset, nuplus, numinus] then
+                tp^.tuplusop := false;
         mknode := tp
 end;
 
@@ -3419,7 +3476,8 @@ procedure parse;
         function pvariable;
 
         var     tp,
-                tq      : treeptr;
+                tq,
+                tv      : treeptr;
 
         begin
                 nextsymbol([slpar, slbrack, sdot, sarrow,
@@ -3455,6 +3513,11 @@ procedure parse;
                                         tp := mknode(nindex);
                                         tp^.tvariable := tq;
                                         tp^.toffset := pexpr(nil);
+                                        tv := typeof(tq);
+                                        if not ((tv^.tt = narray) or
+                                                (tv^.tt = nconfarr) or
+                                                (tv = typnods[tstring])) then
+                                                error(eindex);
                                         tq := tp
                                 until   currsym.st = srbrack
                             end;
@@ -3464,12 +3527,19 @@ procedure parse;
                                 tp^.trecord := varptr;
                                 nextsymbol([sid]);
                                 tq := typeof(varptr);
+                                if tq^.tt <> nrecord then
+                                        error(enotrecord);
                                 enterscope(tq^.trscope);
                                 tp^.tfield := oldid(currsym.vid, lfield);
                                 leavescope
                             end;
                           sarrow:
                             begin
+                                tq := typeof(varptr);
+                                if not ((tq^.tt = nptr) or
+                                        (tq^.tt = nfileof) or
+                                        (tq = typnods[ttext])) then
+                                        error(enotpointer);
                                 tp := mknode(nderef);
                                 tp^.texps := varptr
                             end
@@ -3533,6 +3603,7 @@ procedure parse;
                   splus:
                     begin
                         tp := mknode(nuplus);
+                        tp^.tuplusop := true;
                         tp^.texps := nil;
                         tp := pexpr(tp);
                         next := false
@@ -3827,6 +3898,8 @@ procedure parse;
                         enterscope(nil);
                         tq^.tenv := currscope;
                         tq^.texpw := pexpr(nil);
+                        if typeof(tq^.texpw)^.tt <> nrecord then
+                                error(enotrecord);
                         scopeup(tq^.texpw);
                         checksymbol([scomma, sdo])
                 until   currsym.st = sdo;
@@ -3889,9 +3962,1290 @@ begin   (* parse *)
         else
                 top := pmodule
 end;    (* parse *)
+(*      Compute value for a constant node.                              *)
+function cvalof(tp : treeptr) : integer; forward;
+
+(*      Check declarations, expressions and statements for semantic     *)
+(*      correctness. The checker stops at the first detected error.      *)
+procedure semcheck;
+
+var     assigned        : boolean;
+
+        procedure checkexpr(tp, fn : treeptr); forward;
+        procedure checkstmt(tp, fn : treeptr; var assigned : boolean); forward;
+        procedure checktype(tp : treeptr); forward;
+
+        procedure semerror(tp : treeptr; m : errors);
+        begin
+                if tp <> nil then
+                    begin
+                        lastline := tp^.tline;
+                        lastcol := tp^.tcol
+                    end;
+                error(m)
+        end;
+
+        function declof(tp : treeptr) : treeptr;
+        begin
+                if (tp = nil) or (tp^.tt <> nid) then
+                        declof := nil
+                else
+                        declof := idup(tp)
+        end;
+
+        function typeref(tp : treeptr) : boolean;
+
+        var     tq      : treeptr;
+
+        begin
+                if tp = nil then
+                        typeref := false
+                else
+                    begin
+                        case tp^.tt of
+                          nid:
+                            begin
+                                tq := idup(tp);
+                                if tq = nil then
+                                        typeref := false
+                                else
+                                        typeref := tq^.tt = ntype
+                            end;
+                          npredef, nptr, nscalar, nrecord, nconfarr,
+                          narray, nfileof, nsetof, nsubrange:
+                                typeref := true;
+                          otherwise
+                                typeref := false
+                        end
+                    end
+        end;
+
+        function basetype(tp : treeptr) : treeptr;
+
+        var     tq      : treeptr;
+
+        begin
+                tq := typeof(tp);
+                while tq^.tt = nsubrange do
+                        tq := typeof(tq^.tlo);
+                basetype := tq
+        end;
+
+        function ordinaltype(tp : treeptr) : boolean;
+
+        var     tq      : treeptr;
+
+        begin
+                tq := basetype(tp);
+                ordinaltype := (tq = typnods[tinteger]) or
+                                (tq = typnods[tchar]) or
+                                (tq = typnods[tboolean]) or
+                                (tq^.tt = nscalar)
+        end;
+
+        function integertype(tp : treeptr) : boolean;
+        begin
+                integertype := basetype(tp) = typnods[tinteger]
+        end;
+
+        function numerictype(tp : treeptr) : boolean;
+
+        var     tq      : treeptr;
+
+        begin
+                tq := basetype(tp);
+                numerictype := (tq = typnods[tinteger]) or
+                                                (tq = typnods[treal])
+        end;
+
+        function filetype(tp : treeptr) : boolean;
+
+        var     tq      : treeptr;
+
+        begin
+                tq := typeof(tp);
+                filetype := (tq = typnods[ttext]) or (tq^.tt = nfileof)
+        end;
+
+        function chararray(tp : treeptr) : boolean;
+
+        var     tq      : treeptr;
+
+        begin
+                tq := typeof(tp);
+                if tq^.tt = narray then
+                        chararray := basetype(tq^.taelem) = typnods[tchar]
+                else if tq^.tt = nconfarr then
+                        chararray := basetype(tq^.tcelem) = typnods[tchar]
+                else
+                        chararray := false
+        end;
+
+        function sametype(tl, tr : treeptr) : boolean;
+
+        var     ta, tb  : treeptr;
+
+        begin
+                ta := typeof(tl);
+                tb := typeof(tr);
+                if ta = tb then
+                        sametype := true
+                else
+                    begin
+                        if ta^.tt = nsubrange then
+                                ta := basetype(ta);
+                        if tb^.tt = nsubrange then
+                                tb := basetype(tb);
+                        if ta = tb then
+                                sametype := true
+                        else if (ta^.tt = nsetof) and (tb^.tt = nsetof) then
+                                sametype := sametype(ta^.tof, tb^.tof)
+                        else
+                                sametype := false
+                    end
+        end;
+
+        function identicaltype(tl, tr : treeptr) : boolean;
+
+        var     ta, tb  : treeptr;
+
+        begin
+                ta := typeof(tl);
+                tb := typeof(tr);
+                if ta = tb then
+                        identicaltype := true
+                else if (ta^.tt = nconfarr) and (tb^.tt = narray) then
+                        identicaltype := sametype(ta^.tcelem, tb^.taelem)
+                else if (ta^.tt = narray) and (tb^.tt = nconfarr) then
+                        identicaltype := sametype(ta^.taelem, tb^.tcelem)
+                else
+                        identicaltype := false
+        end;
+
+        function assignable(tl, tr : treeptr) : boolean;
+
+        var     ta, tb  : treeptr;
+
+        begin
+                ta := typeof(tl);
+                tb := typeof(tr);
+                if sametype(ta, tb) then
+                        assignable := true
+                else if (basetype(ta) = typnods[treal]) and
+                                (basetype(tb) = typnods[tinteger]) then
+                        assignable := true
+                else if (ta^.tt = nptr) and (tb = typnods[tnil]) then
+                        assignable := true
+                else if (ta^.tt = nsetof) and (tb = typnods[tset]) then
+                        assignable := true
+                else if chararray(ta) and (tb = typnods[tstring]) then
+                        assignable := true
+                else
+                        assignable := false
+        end;
+
+        function constant(tp : treeptr) : boolean;
+
+        var     tq      : treeptr;
+
+        begin
+                if tp = nil then
+                        constant := false
+                else
+                    begin
+                        case tp^.tt of
+                          ninteger, nreal, nchar, nstring:
+                                constant := true;
+                          nid:
+                            begin
+                                tq := idup(tp);
+                                if tq = nil then
+                                        constant := false
+                                else
+                                        constant := tq^.tt in [nconst, nscalar]
+                            end;
+                          nuplus, numinus, nnot:
+                                constant := constant(tp^.texps);
+                          otherwise
+                                constant := false
+                        end
+                    end
+        end;
+
+        function variable(tp, fn : treeptr) : boolean;
+
+        var     tq      : treeptr;
+
+        begin
+                if tp = nil then
+                        variable := false
+                else
+                    begin
+                        case tp^.tt of
+                          nid:
+                            begin
+                                tq := idup(tp);
+                                if tq = nil then
+                                        variable := false
+                                else
+                                        variable := tq^.tt in
+                                                [nvar, nvalpar, nvarpar, nfield]
+                            end;
+                          nindex, nselect, nderef:
+                                variable := true;
+                          ncall:
+                            begin
+                                tq := idup(tp^.tcall);
+                                variable := (tq = fn) and
+                                                (tp^.taparm = nil) and
+                                                (fn <> nil) and
+                                                (fn^.tt = nfunc)
+                            end;
+                          otherwise
+                                variable := false
+                        end
+                    end
+        end;
+
+        function functionresult(tp, fn : treeptr) : boolean;
+
+        var     tq      : treeptr;
+
+        begin
+                functionresult := false;
+                if (tp <> nil) and (fn <> nil) then
+                        if tp^.tt = ncall then
+                            begin
+                                tq := idup(tp^.tcall);
+                                if (tq = fn) and (tp^.taparm = nil) then
+                                        functionresult := true
+                            end
+                        else if tp^.tt = nid then
+                                if idup(tp) = fn then
+                                        functionresult := true
+        end;
+
+        function setbase(tp : treeptr) : treeptr;
+
+        var     tq      : treeptr;
+
+        begin
+                tq := typeof(tp);
+                if tq^.tt = nsetof then
+                        setbase := basetype(tq^.tof)
+                else if tp^.tt = nset then
+                    begin
+                        tq := tp^.texps;
+                        if tq = nil then
+                                setbase := nil
+                        else if tq^.tt = nempty then
+                                setbase := nil
+                        else if tq^.tt = nrange then
+                                setbase := basetype(tq^.texpl)
+                        else
+                                setbase := basetype(tq)
+                    end
+                else
+                        setbase := nil
+        end;
+
+        function setcompatible(tl, tr : treeptr) : boolean;
+
+        var     ta, tb  : treeptr;
+
+        begin
+                ta := setbase(tl);
+                tb := setbase(tr);
+                if (ta = nil) or (tb = nil) then
+                        setcompatible := true
+                else
+                        setcompatible := sametype(ta, tb)
+        end;
+
+        function callarg(tp : treeptr; n : integer) : treeptr;
+        begin
+                while (tp <> nil) and (n > 1) do
+                    begin
+                        tp := tp^.tnext;
+                        n := n - 1
+                    end;
+                callarg := tp
+        end;
+
+        function argcount(tp : treeptr) : integer;
+
+        var     n       : integer;
+
+        begin
+                n := 0;
+                while tp <> nil do
+                    begin
+                        n := n + 1;
+                        tp := tp^.tnext
+                    end;
+                argcount := n
+        end;
+
+        procedure firstformal(sp : treeptr; var fp, fi : treeptr);
+        begin
+                fp := sp;
+                if fp = nil then
+                        fi := nil
+                else if fp^.tt in [nvalpar, nvarpar] then
+                        fi := fp^.tidl
+                else
+                        fi := fp^.tparid
+        end;
+
+        procedure nextformal(var fp, fi : treeptr);
+        begin
+                if fp <> nil then
+                    begin
+                        if (fp^.tt in [nvalpar, nvarpar]) and
+                                                (fi^.tnext <> nil) then
+                                fi := fi^.tnext
+                        else begin
+                                fp := fp^.tnext;
+                                if fp = nil then
+                                        fi := nil
+                                else if fp^.tt in [nvalpar, nvarpar] then
+                                        fi := fp^.tidl
+                                else
+                                        fi := fp^.tparid
+                             end
+                    end
+        end;
+
+        function subdecl(tp : treeptr) : treeptr;
+        begin
+                if tp = nil then
+                        subdecl := nil
+                else if tp^.tt = ncall then
+                        subdecl := idup(tp^.tcall)
+                else if tp^.tt = nid then
+                        subdecl := idup(tp)
+                else
+                        subdecl := nil
+        end;
+
+        function sameprofile(formal, actual : treeptr) : boolean;
+
+        var     fp, fi,
+                ap, ai  : treeptr;
+                good    : boolean;
+
+        begin
+                good := true;
+                if (formal = nil) or (actual = nil) then
+                        good := false
+                else if (formal^.tt = nparproc) and
+                                not (actual^.tt in [nproc, nparproc]) then
+                        good := false
+                else if (formal^.tt = nparfunc) and
+                                not (actual^.tt in [nfunc, nparfunc]) then
+                        good := false;
+                if good and (formal^.tt = nparfunc) then
+                        if actual^.tt = nfunc then
+                                good := sametype(formal^.tpartyp,
+                                                        actual^.tfuntyp)
+                        else
+                                good := sametype(formal^.tpartyp,
+                                                        actual^.tpartyp);
+                if good then
+                    begin
+                        firstformal(formal^.tparparm, fp, fi);
+                        if actual^.tt in [nproc, nfunc] then
+                                firstformal(actual^.tsubpar, ap, ai)
+                        else
+                                firstformal(actual^.tparparm, ap, ai);
+                        while good and (fi <> nil) and (ai <> nil) do
+                            begin
+                                if fp^.tt <> ap^.tt then
+                                        good := false
+                                else if fp^.tt in [nvalpar, nvarpar] then
+                                        good := identicaltype(fp^.tbind,
+                                                                ap^.tbind)
+                                else
+                                        good := sameprofile(fp, ap);
+                                nextformal(fp, fi);
+                                nextformal(ap, ai)
+                            end;
+                        if (fi <> nil) or (ai <> nil) then
+                                good := false
+                    end;
+                sameprofile := good
+        end;
+
+        procedure checkset(tp, fn : treeptr);
+
+        var     tq, tb,
+                tx      : treeptr;
+
+        begin
+                tb := nil;
+                tq := tp^.texps;
+                while tq <> nil do
+                    begin
+                        if tq^.tt = nempty then
+                            begin
+                                if tq^.tnext <> nil then
+                                        semerror(tq, eoperand)
+                            end
+                        else if tq^.tt = nrange then
+                            begin
+                                checkexpr(tq^.texpl, fn);
+                                checkexpr(tq^.texpr, fn);
+                                if not ordinaltype(tq^.texpl) then
+                                        semerror(tq, eoperand);
+                                if not sametype(tq^.texpl, tq^.texpr) then
+                                        semerror(tq, eoperand);
+                                tx := basetype(tq^.texpl);
+                                if constant(tq^.texpl) and
+                                                constant(tq^.texpr) then
+                                        if cvalof(tq^.texpl) >
+                                                        cvalof(tq^.texpr) then
+                                                semerror(tq, ebadrange)
+                            end
+                        else begin
+                                checkexpr(tq, fn);
+                                if not ordinaltype(tq) then
+                                        semerror(tq, eoperand);
+                                tx := basetype(tq)
+                             end;
+                        if tq^.tt <> nempty then
+                                if tb = nil then
+                                        tb := tx
+                                else if not sametype(tb, tx) then
+                                        semerror(tq, eoperand);
+                        tq := tq^.tnext
+                    end
+        end;
+
+        procedure checkpredef(pd : predefs; cp, fn : treeptr);
+
+        var     a, f,
+                tq      : treeptr;
+                n       : integer;
+
+        begin
+                a := cp^.taparm;
+                n := argcount(a);
+                case pd of
+                  dabs, dsqr:
+                    begin
+                        if n <> 1 then semerror(cp, eargcount);
+                        checkexpr(a, fn);
+                        if not numerictype(a) then semerror(a, eargtype)
+                    end;
+                  darctan, dcos, dexp, dln, dsin, dsqrt, dtan:
+                    begin
+                        if n <> 1 then semerror(cp, eargcount);
+                        checkexpr(a, fn);
+                        if not numerictype(a) then semerror(a, eargtype)
+                    end;
+                  dchr:
+                    begin
+                        if n <> 1 then semerror(cp, eargcount);
+                        checkexpr(a, fn);
+                        if not ordinaltype(a) then semerror(a, eargtype)
+                    end;
+                  dord, dpred, dsucc:
+                    begin
+                        if n <> 1 then semerror(cp, eargcount);
+                        checkexpr(a, fn);
+                        if not ordinaltype(a) then semerror(a, eargtype)
+                    end;
+                  dodd:
+                    begin
+                        if n <> 1 then semerror(cp, eargcount);
+                        checkexpr(a, fn);
+                        if not integertype(a) then semerror(a, eargtype)
+                    end;
+                  dround, dtrunc:
+                    begin
+                        if n <> 1 then semerror(cp, eargcount);
+                        checkexpr(a, fn);
+                        if not numerictype(a) then semerror(a, eargtype)
+                    end;
+                  deof, deoln, dflush, dpage:
+                    begin
+                        if n > 1 then semerror(cp, eargcount);
+                        if a <> nil then
+                            begin
+                                checkexpr(a, fn);
+                                if not filetype(a) then semerror(a, eargtype)
+                            end
+                    end;
+                  dexit:
+                    begin
+                        if n > 1 then semerror(cp, eargcount);
+                        if a <> nil then
+                            begin
+                                checkexpr(a, fn);
+                                if not integertype(a) then semerror(a, eargtype)
+                            end
+                    end;
+                  dhalt:
+                        if n <> 0 then semerror(cp, eargcount);
+                  dget, dput, dclose:
+                    begin
+                        if n <> 1 then semerror(cp, eargcount);
+                        checkexpr(a, fn);
+                        if not filetype(a) then semerror(a, eargtype);
+                        if not variable(a, fn) then semerror(a, eidkind)
+                    end;
+                  ddispose:
+                    begin
+                        if n <> 1 then semerror(cp, eargcount);
+                        checkexpr(a, fn);
+                        if typeof(a)^.tt <> nptr then semerror(a, eargtype)
+                    end;
+                  dnew:
+                    begin
+                        if n < 1 then semerror(cp, eargcount);
+                        checkexpr(a, fn);
+                        if not variable(a, fn) then semerror(a, eidkind);
+                        if typeof(a)^.tt <> nptr then semerror(a, eargtype);
+                        tq := a^.tnext;
+                        while tq <> nil do
+                            begin
+                                checkexpr(tq, fn);
+                                if not constant(tq) then
+                                        semerror(tq, econstexpected);
+                                tq := tq^.tnext
+                            end
+                    end;
+                  dargv:
+                    begin
+                        if n <> 2 then semerror(cp, eargcount);
+                        checkexpr(a, fn);
+                        if not integertype(a) then semerror(a, eargtype);
+                        tq := a^.tnext;
+                        checkexpr(tq, fn);
+                        if not variable(tq, fn) then semerror(tq, eidkind);
+                        if not chararray(tq) then semerror(tq, eargtype)
+                    end;
+                  dreset, drewrite:
+                    begin
+                        if (n < 1) or (n > 2) then
+                                semerror(cp, eargcount);
+                        checkexpr(a, fn);
+                        if not filetype(a) then semerror(a, eargtype);
+                        if not variable(a, fn) then semerror(a, eidkind);
+                        tq := a^.tnext;
+                        if tq <> nil then
+                            begin
+                                checkexpr(tq, fn);
+                                if not ((basetype(tq) = typnods[tchar]) or
+                                        (typeof(tq) = typnods[tstring]) or
+                                        chararray(tq)) then
+                                        semerror(tq, eargtype)
+                            end
+                    end;
+                  dread, dreadln:
+                    begin
+                        tq := a;
+                        if tq <> nil then
+                                if filetype(tq) then
+                                    begin
+                                        checkexpr(tq, fn);
+                                        tq := tq^.tnext
+                                    end;
+                        while tq <> nil do
+                            begin
+                                if tq^.tt = nformat then
+                                        f := tq^.texpl
+                                else
+                                        f := tq;
+                                checkexpr(f, fn);
+                                if not variable(f, fn) then
+                                        semerror(f, eidkind);
+                                tq := tq^.tnext
+                            end
+                    end;
+                  dwrite, dwriteln, dmessage:
+                    begin
+                        tq := a;
+                        if (pd <> dmessage) and (tq <> nil) then
+                                if filetype(tq) then
+                                    begin
+                                        checkexpr(tq, fn);
+                                        tq := tq^.tnext
+                                    end;
+                        while tq <> nil do
+                            begin
+                                checkexpr(tq, fn);
+                                f := typeof(tq);
+                                if tq^.tt = nformat then
+                                        f := typeof(tq^.texpl);
+                                if not ((basetype(f) = typnods[tinteger]) or
+                                        (basetype(f) = typnods[tchar]) or
+                                        (basetype(f) = typnods[treal]) or
+                                        (basetype(f) = typnods[tboolean]) or
+                                        (f = typnods[tstring]) or
+                                        (f^.tt = narray) or
+                                        (f^.tt = nconfarr)) then
+                                        semerror(tq, eargtype);
+                                tq := tq^.tnext
+                            end
+                    end;
+                  dpack:
+                    begin
+                        if n <> 3 then semerror(cp, eargcount);
+                        tq := callarg(a, 1);
+                        checkexpr(tq, fn);
+                        if not (typeof(tq)^.tt in [narray, nconfarr]) then
+                                semerror(tq, eargtype);
+                        tq := callarg(a, 2);
+                        checkexpr(tq, fn);
+                        if not ordinaltype(tq) then semerror(tq, eargtype);
+                        tq := callarg(a, 3);
+                        checkexpr(tq, fn);
+                        if not variable(tq, fn) then semerror(tq, eidkind);
+                        if not (typeof(tq)^.tt in [narray, nconfarr]) then
+                                semerror(tq, eargtype)
+                    end;
+                  dunpack:
+                    begin
+                        if n <> 3 then semerror(cp, eargcount);
+                        tq := callarg(a, 1);
+                        checkexpr(tq, fn);
+                        if not (typeof(tq)^.tt in [narray, nconfarr]) then
+                                semerror(tq, eargtype);
+                        tq := callarg(a, 2);
+                        checkexpr(tq, fn);
+                        if not variable(tq, fn) then semerror(tq, eidkind);
+                        if not (typeof(tq)^.tt in [narray, nconfarr]) then
+                                semerror(tq, eargtype);
+                        tq := callarg(a, 3);
+                        checkexpr(tq, fn);
+                        if not ordinaltype(tq) then semerror(tq, eargtype)
+                    end;
+                  otherwise
+                    begin
+                        tq := a;
+                        while tq <> nil do
+                            begin
+                                checkexpr(tq, fn);
+                                tq := tq^.tnext
+                            end
+                    end
+                end
+        end;
+
+        procedure checkcall(cp, fn : treeptr; expression : boolean);
+
+        var     sd, fp, fi,
+                ap, ad  : treeptr;
+                pd      : predefs;
+
+        begin
+                if (cp^.tcall = nil) or (cp^.tcall^.tt <> nid) then
+                        semerror(cp, ecalltarget);
+                sd := idup(cp^.tcall);
+                if sd = nil then
+                        semerror(cp, ecalltarget);
+                if not (sd^.tt in [nfunc, nproc, nparfunc, nparproc]) then
+                        semerror(cp, ecalltarget);
+                if expression then
+                    begin
+                        if sd^.tt in [nproc, nparproc] then
+                                semerror(cp, eprocexpr)
+                    end
+                else if sd^.tt in [nfunc, nparfunc] then
+                        semerror(cp, efuncstmt);
+                if (sd^.tt in [nfunc, nproc]) and
+                                (sd^.tsubstmt <> nil) and
+                                (sd^.tsubstmt^.tt = npredef) then
+                    begin
+                        pd := sd^.tsubstmt^.tdef;
+                        checkpredef(pd, cp, fn)
+                    end
+                else begin
+                        if sd^.tt in [nfunc, nproc] then
+                                firstformal(sd^.tsubpar, fp, fi)
+                        else
+                                firstformal(sd^.tparparm, fp, fi);
+                        ap := cp^.taparm;
+                        while (fi <> nil) and (ap <> nil) do
+                            begin
+                                if fp^.tt in [nvalpar, nvarpar] then
+                                    begin
+                                        checkexpr(ap, fn);
+                                        if fp^.tt = nvarpar then
+                                            begin
+                                                if not variable(ap, fn) then
+                                                        semerror(ap, evarpar);
+                                                if not identicaltype(fp^.tbind,
+                                                                ap) then
+                                                        semerror(ap, eargtype)
+                                            end
+                                        else if not assignable(fp^.tbind,
+                                                                ap) then
+                                                semerror(ap, eargtype)
+                                    end
+                                else begin
+                                        ad := subdecl(ap);
+                                        if ad = nil then
+                                                semerror(ap, eargtype);
+                                        if not sameprofile(fp, ad) then
+                                                semerror(ap, eargtype)
+                                     end;
+                                nextformal(fp, fi);
+                                ap := ap^.tnext
+                            end;
+                        if (fi <> nil) or (ap <> nil) then
+                                semerror(cp, eargcount)
+                     end
+        end;
+
+        procedure checkexpr;
+
+        var     tl, tr,
+                tq, ti  : treeptr;
+
+        begin
+                if tp = nil then
+                        semerror(tp, eoperand);
+                case tp^.tt of
+                  nid:
+                    begin
+                        tq := idup(tp);
+                        if tq = nil then semerror(tp, eidkind);
+                        if not (tq^.tt in [nvar, nvalpar, nvarpar,
+                                                nfield, nconst, nscalar]) then
+                                semerror(tp, eidkind)
+                    end;
+                  ninteger, nreal, nchar, nstring, nnil:
+                        (* no op *);
+                  ncall:
+                        checkcall(tp, fn, true);
+                  nuplus:
+                    begin
+                        checkexpr(tp^.texps, fn);
+                        if tp^.tuplusop then
+                                if not numerictype(tp^.texps) then
+                                        semerror(tp, eoperand)
+                    end;
+                  numinus:
+                    begin
+                        checkexpr(tp^.texps, fn);
+                        if not numerictype(tp^.texps) then
+                                semerror(tp, eoperand)
+                    end;
+                  nnot:
+                    begin
+                        checkexpr(tp^.texps, fn);
+                        if basetype(tp^.texps) <> typnods[tboolean] then
+                                semerror(tp, eboolxp)
+                    end;
+                  nplus, nminus, nmul:
+                    begin
+                        checkexpr(tp^.texpl, fn);
+                        checkexpr(tp^.texpr, fn);
+                        tl := typeof(tp^.texpl);
+                        tr := typeof(tp^.texpr);
+                        if numerictype(tl) and numerictype(tr) then
+                                (* no op *)
+                        else if ((tl^.tt = nsetof) or
+                                        (tl = typnods[tset])) and
+                                ((tr^.tt = nsetof) or
+                                        (tr = typnods[tset])) then
+                            begin
+                                if not setcompatible(tp^.texpl,
+                                                        tp^.texpr) then
+                                        semerror(tp, eoperand)
+                            end
+                        else
+                                semerror(tp, eoperand)
+                    end;
+                  ndiv, nmod:
+                    begin
+                        checkexpr(tp^.texpl, fn);
+                        checkexpr(tp^.texpr, fn);
+                        if not integertype(tp^.texpl) or
+                                        not integertype(tp^.texpr) then
+                                semerror(tp, eoperand)
+                    end;
+                  nquot:
+                    begin
+                        checkexpr(tp^.texpl, fn);
+                        checkexpr(tp^.texpr, fn);
+                        if not numerictype(tp^.texpl) or
+                                        not numerictype(tp^.texpr) then
+                                semerror(tp, eoperand)
+                    end;
+                  nand, nor:
+                    begin
+                        checkexpr(tp^.texpl, fn);
+                        checkexpr(tp^.texpr, fn);
+                        if (basetype(tp^.texpl) <> typnods[tboolean]) or
+                           (basetype(tp^.texpr) <> typnods[tboolean]) then
+                                semerror(tp, eboolxp)
+                    end;
+                  neq, nne, nlt, nle, ngt, nge:
+                    begin
+                        checkexpr(tp^.texpl, fn);
+                        checkexpr(tp^.texpr, fn);
+                        tl := typeof(tp^.texpl);
+                        tr := typeof(tp^.texpr);
+                        if numerictype(tl) and numerictype(tr) then
+                                (* no op *)
+                        else if ordinaltype(tl) and ordinaltype(tr) and
+                                                sametype(tl, tr) then
+                                (* no op *)
+                        else if ((tl^.tt = nptr) and
+                                                (tr = typnods[tnil])) or
+                                ((tr^.tt = nptr) and
+                                                (tl = typnods[tnil])) or
+                                ((tl^.tt = nptr) and sametype(tl, tr)) then
+                            begin
+                                if not (tp^.tt in [neq, nne]) then
+                                        semerror(tp, eoperand)
+                            end
+                        else if ((tl^.tt = nsetof) or
+                                        (tl = typnods[tset])) and
+                                ((tr^.tt = nsetof) or
+                                        (tr = typnods[tset])) then
+                            begin
+                                if not (tp^.tt in [neq, nne, nle, nge]) then
+                                        semerror(tp, eoperand);
+                                if not setcompatible(tp^.texpl,
+                                                        tp^.texpr) then
+                                        semerror(tp, eoperand)
+                            end
+                        else if ((tl = typnods[tstring]) or chararray(tl)) and
+                                ((tr = typnods[tstring]) or chararray(tr)) then
+                                (* no op *)
+                        else
+                                semerror(tp, eoperand)
+                    end;
+                  nin:
+                    begin
+                        checkexpr(tp^.texpl, fn);
+                        checkexpr(tp^.texpr, fn);
+                        if not ordinaltype(tp^.texpl) then
+                                semerror(tp, eoperand);
+                        tr := typeof(tp^.texpr);
+                        if not ((tr^.tt = nsetof) or
+                                        (tr = typnods[tset])) then
+                                semerror(tp, eoperand);
+                        tq := setbase(tp^.texpr);
+                        if tq <> nil then
+                                if not sametype(tp^.texpl, tq) then
+                                        semerror(tp, eoperand)
+                    end;
+                  nset:
+                        checkset(tp, fn);
+                  nrange:
+                        semerror(tp, eoperand);
+                  nformat:
+                    begin
+                        checkexpr(tp^.texpl, fn);
+                        checkexpr(tp^.texpr, fn);
+                        if not integertype(tp^.texpr) then
+                                semerror(tp, eargtype)
+                    end;
+                  nindex:
+                    begin
+                        checkexpr(tp^.tvariable, fn);
+                        checkexpr(tp^.toffset, fn);
+                        tq := typeof(tp^.tvariable);
+                        if tq^.tt = narray then
+                                ti := tq^.taindx
+                        else if tq^.tt = nconfarr then
+                                ti := tq^.tindtyp
+                        else if tq = typnods[tstring] then
+                                ti := typnods[tinteger]
+                        else
+                                semerror(tp, eindex);
+                        if not ordinaltype(tp^.toffset) then
+                                semerror(tp, eindex);
+                        if not sametype(ti, tp^.toffset) then
+                                semerror(tp, eindex)
+                    end;
+                  nselect:
+                    begin
+                        checkexpr(tp^.trecord, fn);
+                        tq := typeof(tp^.trecord);
+                        if tq^.tt <> nrecord then
+                                semerror(tp, enotrecord);
+                        if declof(tp^.tfield)^.tt <> nfield then
+                                semerror(tp, eidkind)
+                    end;
+                  nderef:
+                    begin
+                        checkexpr(tp^.texps, fn);
+                        tq := typeof(tp^.texps);
+                        if not ((tq^.tt = nptr) or
+                                (tq^.tt = nfileof) or
+                                (tq = typnods[ttext])) then
+                                semerror(tp, enotpointer)
+                    end;
+                  nempty:
+                        semerror(tp, eoperand);
+                  otherwise
+                        semerror(tp, eoperand)
+                end;
+                tq := typeof(tp)
+        end;
+
+        procedure checktype;
+
+        var     tq, ti,
+                tb      : treeptr;
+
+        begin
+                if tp = nil then
+                        semerror(tp, etypeexpected);
+                if not tp^.tsemchecked then
+                    begin
+                        if not tp^.tsemchecking then
+                            begin
+                                tp^.tsemchecking := true;
+                                case tp^.tt of
+                                  nid:
+                                    begin
+                                        tq := idup(tp);
+                                        if (tq = nil) or
+                                                (tq^.tt <> ntype) then
+                                                semerror(tp, etypeexpected);
+                                        checktype(tq^.tbind)
+                                    end;
+                                  npredef:
+                                        (* no op *);
+                                  nptr:
+                                        checktype(tp^.tptrid);
+                                  nscalar:
+                                        (* no op *);
+                                  nsubrange:
+                                    begin
+                                        if not constant(tp^.tlo) or
+                                                not constant(tp^.thi) then
+                                                semerror(tp, econstexpected);
+                                        if not ordinaltype(tp^.tlo) or
+                                                not ordinaltype(tp^.thi) then
+                                                semerror(tp, ebadrange);
+                                        if not sametype(tp^.tlo, tp^.thi) then
+                                                semerror(tp, ebadrange);
+                                        if cvalof(tp^.tlo) > cvalof(tp^.thi) then
+                                                semerror(tp, ebadrange)
+                                    end;
+                                  narray:
+                                    begin
+                                        checktype(tp^.taindx);
+                                        if not ordinaltype(tp^.taindx) then
+                                                semerror(tp, eindex);
+                                        checktype(tp^.taelem)
+                                    end;
+                                  nconfarr:
+                                    begin
+                                        checktype(tp^.tindtyp);
+                                        if not ordinaltype(tp^.tindtyp) then
+                                                semerror(tp, eindex);
+                                        checktype(tp^.tcelem)
+                                    end;
+                                  nsetof:
+                                    begin
+                                        checktype(tp^.tof);
+                                        if not ordinaltype(tp^.tof) then
+                                                semerror(tp, eoperand)
+                                    end;
+                                  nfileof:
+                                        checktype(tp^.tof);
+                                  nrecord:
+                                    begin
+                                        tq := tp^.tflist;
+                                        while tq <> nil do
+                                            begin
+                                                if not typeref(tq^.tbind) then
+                                                        semerror(tq,
+                                                                etypeexpected);
+                                                checktype(tq^.tbind);
+                                                tq := tq^.tnext
+                                            end;
+                                        tq := tp^.tvlist;
+                                        tb := nil;
+                                        while tq <> nil do
+                                            begin
+                                                ti := tq^.tselct;
+                                                while ti <> nil do
+                                                    begin
+                                                        if not constant(ti) then
+                                                                semerror(ti,
+                                                                econstexpected);
+                                                        if not ordinaltype(ti) then
+                                                                semerror(ti,
+                                                                ecasetype);
+                                                        if tb = nil then
+                                                                tb := basetype(ti)
+                                                        else if not sametype(tb,
+                                                                ti) then
+                                                                semerror(ti,
+                                                                ecasetype);
+                                                        ti := ti^.tnext
+                                                    end;
+                                                checktype(tq^.tvrnt);
+                                                tq := tq^.tnext
+                                            end
+                                    end;
+                                  otherwise
+                                        semerror(tp, etypeexpected)
+                                end;
+                                tp^.tsemchecking := false;
+                                tp^.tsemchecked := true
+                            end
+                    end
+        end;
+
+        procedure checktypedecls(tp : treeptr);
+        begin
+                while tp <> nil do
+                    begin
+                        if not typeref(tp^.tbind) then
+                                semerror(tp, etypeexpected);
+                        checktype(tp^.tbind);
+                        tp := tp^.tnext
+                    end
+        end;
+
+        procedure checkconstants(tp, fn : treeptr);
+        begin
+                while tp <> nil do
+                    begin
+                        if not constant(tp^.tbind) then
+                                semerror(tp, econstexpected);
+                        checkexpr(tp^.tbind, fn);
+                        tp := tp^.tnext
+                    end
+        end;
+
+        procedure checkparams(tp : treeptr);
+        begin
+                while tp <> nil do
+                    begin
+                        case tp^.tt of
+                          nvalpar, nvarpar:
+                            begin
+                                if not typeref(tp^.tbind) then
+                                        semerror(tp, etypeexpected);
+                                checktype(tp^.tbind)
+                            end;
+                          nparproc:
+                                checkparams(tp^.tparparm);
+                          nparfunc:
+                            begin
+                                checkparams(tp^.tparparm);
+                                if not typeref(tp^.tpartyp) then
+                                        semerror(tp, efunrtype);
+                                checktype(tp^.tpartyp)
+                            end
+                        end;
+                        tp := tp^.tnext
+                    end
+        end;
+
+        function resulttype(tp : treeptr) : boolean;
+
+        var     tq      : treeptr;
+
+        begin
+                tq := typeof(tp);
+                resulttype := not (tq^.tt in
+                                [narray, nconfarr, nrecord, nfileof, nsetof])
+        end;
+
+        procedure checkcase(tp, fn : treeptr; var assigned : boolean);
+
+        var     tq, ti,
+                cq, ci  : treeptr;
+                st      : treeptr;
+
+        begin
+                checkexpr(tp^.tcasxp, fn);
+                st := basetype(tp^.tcasxp);
+                if not ordinaltype(st) then
+                        semerror(tp, ecasetype);
+                tq := tp^.tcaslst;
+                while tq <> nil do
+                    begin
+                        ti := tq^.tchocon;
+                        while ti <> nil do
+                            begin
+                                if not constant(ti) then
+                                        semerror(ti, econstexpected);
+                                checkexpr(ti, fn);
+                                if not sametype(st, ti) then
+                                        semerror(ti, ecasetype);
+                                cq := tp^.tcaslst;
+                                while cq <> tq do
+                                    begin
+                                        ci := cq^.tchocon;
+                                        while ci <> nil do
+                                            begin
+                                                if cvalof(ci) = cvalof(ti) then
+                                                        semerror(ti, edupcase);
+                                                ci := ci^.tnext
+                                            end;
+                                        cq := cq^.tnext
+                                    end;
+                                ci := tq^.tchocon;
+                                while ci <> ti do
+                                    begin
+                                        if cvalof(ci) = cvalof(ti) then
+                                                semerror(ti, edupcase);
+                                        ci := ci^.tnext
+                                    end;
+                                ti := ti^.tnext
+                            end;
+                        checkstmt(tq^.tchostmt, fn, assigned);
+                        tq := tq^.tnext
+                    end;
+                checkstmt(tp^.tcasother, fn, assigned)
+        end;
+
+        procedure checkstmt;
+
+        var     tq, ti,
+                ct      : treeptr;
+
+        begin
+                while tp <> nil do
+                    begin
+                        case tp^.tt of
+                          nempty, ngoto:
+                                (* no op *);
+                          nlabstmt:
+                                checkstmt(tp^.tstmt, fn, assigned);
+                          nbegin:
+                                checkstmt(tp^.tbegin, fn, assigned);
+                          nassign:
+                            begin
+                                checkexpr(tp^.trhs, fn);
+                                if functionresult(tp^.tlhs, fn) then
+                                    begin
+                                        if not assignable(fn^.tfuntyp,
+                                                        tp^.trhs) then
+                                                semerror(tp, easgntype);
+                                        assigned := true
+                                    end
+                                else begin
+                                        if not variable(tp^.tlhs, fn) then
+                                                semerror(tp^.tlhs, eidkind);
+                                        checkexpr(tp^.tlhs, fn);
+                                        if not assignable(tp^.tlhs,
+                                                        tp^.trhs) then
+                                                semerror(tp, easgntype)
+                                     end
+                            end;
+                          ncall:
+                                checkcall(tp, fn, false);
+                          nif:
+                            begin
+                                checkexpr(tp^.tifxp, fn);
+                                if basetype(tp^.tifxp) <>
+                                                typnods[tboolean] then
+                                        semerror(tp, eboolxp);
+                                checkstmt(tp^.tthen, fn, assigned);
+                                checkstmt(tp^.telse, fn, assigned)
+                            end;
+                          nwhile:
+                            begin
+                                checkexpr(tp^.twhixp, fn);
+                                if basetype(tp^.twhixp) <>
+                                                typnods[tboolean] then
+                                        semerror(tp, eboolxp);
+                                checkstmt(tp^.twhistmt, fn, assigned)
+                            end;
+                          nrepeat:
+                            begin
+                                checkstmt(tp^.treptstmt, fn, assigned);
+                                checkexpr(tp^.treptxp, fn);
+                                if basetype(tp^.treptxp) <>
+                                                typnods[tboolean] then
+                                        semerror(tp, eboolxp)
+                            end;
+                          nfor:
+                            begin
+                                if not variable(tp^.tforid, fn) then
+                                        semerror(tp, eforctrl);
+                                checkexpr(tp^.tforid, fn);
+                                checkexpr(tp^.tfrom, fn);
+                                checkexpr(tp^.tto, fn);
+                                ct := typeof(tp^.tforid);
+                                if not ordinaltype(ct) then
+                                        semerror(tp, eforctrl);
+                                if not assignable(ct, tp^.tfrom) or
+                                        not assignable(ct, tp^.tto) then
+                                        semerror(tp, eforctrl);
+                                checkstmt(tp^.tforstmt, fn, assigned)
+                            end;
+                          ncase:
+                                checkcase(tp, fn, assigned);
+                          nwith:
+                            begin
+                                tq := tp^.twithvar;
+                                while tq <> nil do
+                                    begin
+                                        checkexpr(tq^.texpw, fn);
+                                        if typeof(tq^.texpw)^.tt <>
+                                                        nrecord then
+                                                semerror(tq, enotrecord);
+                                        if not variable(tq^.texpw, fn) then
+                                                semerror(tq, eidkind);
+                                        tq := tq^.tnext
+                                    end;
+                                checkstmt(tp^.twithstmt, fn, assigned)
+                            end;
+                          otherwise
+                                semerror(tp, eidkind)
+                        end;
+                        tp := tp^.tnext
+                    end
+        end;
+
+        procedure checksub(tp : treeptr);
+
+        var     tq      : treeptr;
+                assigned: boolean;
+
+        begin
+                while tp <> nil do
+                    begin
+                        checkparams(tp^.tsubpar);
+                        if tp^.tt = nfunc then
+                            begin
+                                if not typeref(tp^.tfuntyp) then
+                                        semerror(tp, efunrtype);
+                                checktype(tp^.tfuntyp);
+                                if not resulttype(tp^.tfuntyp) then
+                                        semerror(tp, efunrtype)
+                            end;
+                        checkconstants(tp^.tsubconst, tp);
+                        checktypedecls(tp^.tsubtype);
+                        checktypedecls(tp^.tsubvar);
+                        checksub(tp^.tsubsub);
+                        assigned := false;
+                        checkstmt(tp^.tsubstmt, tp, assigned);
+                        if (tp^.tt = nfunc) and (tp^.tsubstmt <> nil) then
+                                if not assigned then
+                                        semerror(tp, enofunresult);
+                        tp := tp^.tnext
+                    end
+        end;
+
+begin   (* semcheck *)
+        checkconstants(top^.tsubconst, top);
+        checktypedecls(top^.tsubtype);
+        checktypedecls(top^.tsubvar);
+        checksub(top^.tsubsub);
+        assigned := false;
+        checkstmt(top^.tsubstmt, top, assigned)
+end;    (* semcheck *)
+
 
 (*      Compute value for a node (which must be some kind of constant). *)
-function cvalof(tp : treeptr) : integer;
+function cvalof;
 
 var     v       : integer;
         tq      : treeptr;
@@ -9893,6 +11247,7 @@ begin   (* program *)
         if echo then
                 writeln('# ifdef PASCAL');
         parse;
+        semcheck;
         if echo then
                 writeln('# else');
         lineno := 0; lastline := 0;

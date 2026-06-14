@@ -207,7 +207,7 @@ typedef enum { sand, sarray, sbegin, scase,
  scolon, ssemic, sassign, sdotdot,
  sdot }  symtyp;
 typedef struct { setword S[6]; } symset;
-typedef struct S184 {
+typedef struct S206 {
  symtyp st;
  union {
   struct  {
@@ -289,6 +289,8 @@ typedef enum { tnone, tboolean, tchar, tinteger,
 typedef enum { anone, aregister, aextern, areference }  attributes;
 typedef struct S64 {
  treeptr tnext, ttype, tup;
+ integer tline, tcol;
+ boolean tsemchecked, tsemchecking;
  treetyp tt;
  union {
   struct  {
@@ -395,6 +397,7 @@ typedef struct S64 {
   } V41;
   struct  {
    treeptr texps;
+   boolean tuplusop;
   } V42;
   struct  {
    symptr tsym;
@@ -424,9 +427,14 @@ typedef enum { ebadsymbol, elongstring, elongtokn, erange,
  enew, esetbase, esetsize, eoverflow,
  etree, etag, euprconf, easgnconf,
  ecmpconf, econfconf, evrntfile, evarfile,
- emanymachs, ebadmach, eprconf }  errors;
+ emanymachs, ebadmach, eprconf, easgntype,
+ eoperand, eargcount, eargtype, efunrtype,
+ eindex, enotrecord, enotpointer, eforctrl,
+ eboolxp, ecasetype, edupcase, enofunresult,
+ eprocexpr, eidkind, etypeexpected, econstexpected,
+ ecalltarget, efuncstmt, ebadrange }  errors;
 typedef struct { char A[machdeflen - 1 + 1]; } machdefstr;
-typedef struct { struct S210 {
+typedef struct { struct S232 {
  keyword wrd;
  symtyp sym;
 } A[keytablen + 1]; } T66;
@@ -437,26 +445,26 @@ typedef struct { symptr A[50]; } T70;
 typedef struct { treeptr A[11]; } T71;
 typedef struct { unsigned char A[(int)(nnil) - (int)(nassign) + 1]; } T72;
 typedef struct { idptr A[61]; } T73;
-typedef struct { struct S197 {
+typedef struct { struct S219 {
  integer lolim, hilim;
  strindx typstr;
 } A[maxmachdefs - 1 + 1]; } T74;
 typedef struct { char A[15 + 1]; } T75;
 typedef struct { setword S[2]; } bitset;
-integer *G208_indnt;
-boolean *G206_donearr;
-boolean *G204_doarrow;
-boolean *G202_dropset;
-boolean *G200_setused;
-boolean *G198_conflag;
-integer *G195_nelems;
-treeptr *G193_vp;
-treeptr *G191_tv;
-symptr *G189_iq;
-symptr *G187_ip;
-unsigned char *G185_lastchr;
-toknidx *G182_i;
-toknbuf *G180_t;
+integer *G230_indnt;
+boolean *G228_donearr;
+boolean *G226_doarrow;
+boolean *G224_dropset;
+boolean *G222_setused;
+boolean *G220_conflag;
+integer *G217_nelems;
+treeptr *G215_vp;
+treeptr *G213_tv;
+symptr *G211_iq;
+symptr *G209_ip;
+unsigned char *G207_lastchr;
+toknidx *G204_i;
+toknbuf *G202_t;
 boolean usemax, usejmps, usecase, usesets, useunion, usediff,
  usemksub, useintr, usesge, usesle, useseq, usesne,
  usememb, useins, usescpy, usecomp, usealig, usesal,
@@ -591,6 +599,66 @@ prtmsg(m)
   break ;
    case eprconf:
   (void)fprintf(stderr, "%sCannot write conformant arrays\n", restr), Putl(output, 1);
+  break ;
+   case easgntype:
+  (void)fprintf(stderr, "%sIncompatible types in assignment\n", user), Putl(output, 1);
+  break ;
+   case eoperand:
+  (void)fprintf(stderr, "%sInvalid operand type for operator\n", user), Putl(output, 1);
+  break ;
+   case eargcount:
+  (void)fprintf(stderr, "%sWrong number of arguments\n", user), Putl(output, 1);
+  break ;
+   case eargtype:
+  (void)fprintf(stderr, "%sIncompatible argument type\n", user), Putl(output, 1);
+  break ;
+   case efunrtype:
+  (void)fprintf(stderr, "%sInvalid function result type\n", user), Putl(output, 1);
+  break ;
+   case eindex:
+  (void)fprintf(stderr, "%sInvalid array index or indexed object\n", user), Putl(output, 1);
+  break ;
+   case enotrecord:
+  (void)fprintf(stderr, "%sField selection requires a record\n", user), Putl(output, 1);
+  break ;
+   case enotpointer:
+  (void)fprintf(stderr, "%sDereference requires a pointer or file\n", user), Putl(output, 1);
+  break ;
+   case eforctrl:
+  (void)fprintf(stderr, "%sInvalid for control variable or bounds\n", user), Putl(output, 1);
+  break ;
+   case eboolxp:
+  (void)fprintf(stderr, "%sBoolean expression required\n", user), Putl(output, 1);
+  break ;
+   case ecasetype:
+  (void)fprintf(stderr, "%sInvalid case selector or label type\n", user), Putl(output, 1);
+  break ;
+   case edupcase:
+  (void)fprintf(stderr, "%sDuplicate case label\n", user), Putl(output, 1);
+  break ;
+   case enofunresult:
+  (void)fprintf(stderr, "%sFunction result is never assigned\n", user), Putl(output, 1);
+  break ;
+   case eprocexpr:
+  (void)fprintf(stderr, "%sProcedure call used as an expression\n", user), Putl(output, 1);
+  break ;
+   case eidkind:
+  (void)fprintf(stderr, "%sIdentifier used in an invalid context\n", user), Putl(output, 1);
+  break ;
+   case etypeexpected:
+  (void)fprintf(stderr, "%sType identifier expected\n", user), Putl(output, 1);
+  break ;
+   case econstexpected:
+  (void)fprintf(stderr, "%sConstant expected\n", user), Putl(output, 1);
+  break ;
+   case ecalltarget:
+  (void)fprintf(stderr, "%sCalled identifier is not a subroutine\n", user), Putl(output, 1);
+  break ;
+   case efuncstmt:
+  (void)fprintf(stderr, "%sFunction call used as a statement\n", user), Putl(output, 1);
+  break ;
+   case ebadrange:
+  (void)fprintf(stderr, "%sInvalid subrange bounds\n", user), Putl(output, 1);
   break ;
    default:
   Caseerror(Line);
@@ -892,10 +960,10 @@ dig(n)
 {
  if (n > 0) {
   dig(n / 10);
-  if ((*G182_i) == maxtoknlen)
+  if ((*G204_i) == maxtoknlen)
    error(eoverflow);
-  G180_t->A[(*G182_i) - 1] = n % 10 + (unsigned)('0');
-  (*G182_i) = (*G182_i) + 1;
+  G202_t->A[(*G204_i) - 1] = n % 10 + (unsigned)('0');
+  (*G204_i) = (*G204_i) + 1;
  }
 }
 
@@ -905,22 +973,22 @@ mkuniqname(t)
 {
  register idptr R86;
  toknidx i;
- toknbuf *F181;
- toknidx *F183;
+ toknbuf *F203;
+ toknidx *F205;
 
- F183 = G182_i;
- G182_i = &i;
- F181 = G180_t;
- G180_t = &(*t);
- (*G182_i) = 1;
- while (G180_t->A[(*G182_i) - 1] != null)
-  (*G182_i) = (*G182_i) + 1;
+ F205 = G204_i;
+ G204_i = &i;
+ F203 = G202_t;
+ G202_t = &(*t);
+ (*G204_i) = 1;
+ while (G202_t->A[(*G204_i) - 1] != null)
+  (*G204_i) = (*G204_i) + 1;
  varno = varno + 1;
  dig(varno);
- G180_t->A[(*G182_i) - 1] = null;
- R86 = saveid(&(*G180_t));
- G180_t = F181;
- G182_i = F183;
+ G202_t->A[(*G204_i) - 1] = null;
+ R86 = saveid(&(*G202_t));
+ G202_t = F203;
+ G204_i = F205;
  return R86;
 }
 
@@ -999,9 +1067,9 @@ nextchar()
    if ((unsigned)(c) == 9)
     colno = (((colno - 1) / tabwidth) + 1) * tabwidth;
   }
- if ((*G185_lastchr) > 0) {
-  lasttok.A[(*G185_lastchr) - 1] = c;
-  (*G185_lastchr) = (*G185_lastchr) + 1;
+ if ((*G207_lastchr) > 0) {
+  lasttok.A[(*G207_lastchr) - 1] = c;
+  (*G207_lastchr) = (*G207_lastchr) + 1;
  }
  R90 = c;
  return R90;
@@ -1106,7 +1174,7 @@ nexttoken(realok)
  toknidx wl;
  toknbuf wb;
 
- (*G185_lastchr) = 0;
+ (*G207_lastchr) = 0;
  do {
   c = nextchar();
   if (c == '{') {
@@ -1140,13 +1208,13 @@ nexttoken(realok)
    }
  } while (!((c != space) && ((unsigned)(c) != 9)));
  lasttok.A[1 - 1] = c;
- (*G185_lastchr) = 2;
+ (*G207_lastchr) = 2;
  lastcol = colno;
  lastline = lineno;
  if (c < okchr)
   c = badchr;
  {
-  register struct S184 *W46 = &currsym;
+  register struct S206 *W46 = &currsym;
 
   if (Eof(input)) {
    lasttok.A[1 - 1] = '*';
@@ -1154,7 +1222,7 @@ nexttoken(realok)
    lasttok.A[3 - 1] = 'O';
    lasttok.A[4 - 1] = 'F';
    lasttok.A[5 - 1] = '*';
-   (*G185_lastchr) = 6;
+   (*G207_lastchr) = 6;
    W46->st = seof;
   } else
    switch ((int)(c)) {
@@ -1182,7 +1250,7 @@ nexttoken(realok)
      wl = wl + 1;
     }
     if (wl >= maxtoknlen) {
-     lasttok.A[(*G185_lastchr) - 1] = null;
+     lasttok.A[(*G207_lastchr) - 1] = null;
      error(elongtokn);
     }
     wb.A[wl - 1] = null;
@@ -1323,7 +1391,7 @@ nexttoken(realok)
     ready = false;
     do {
      if (Eoln(input)) {
-      lasttok.A[(*G185_lastchr) - 1] = null;
+      lasttok.A[(*G207_lastchr) - 1] = null;
       error(ebadstring);
      }
      c = nextchar();
@@ -1335,13 +1403,13 @@ nexttoken(realok)
      if (c == null) {
       if (Eof(input))
        error(eeofstr);
-      lasttok.A[(*G185_lastchr) - 1] = null;
+      lasttok.A[(*G207_lastchr) - 1] = null;
       error(enulchr);
      }
      if (!ready) {
       wb.A[wl - 1] = c;
       if (wl >= maxtoknlen) {
-       lasttok.A[(*G185_lastchr) - 1] = null;
+       lasttok.A[(*G207_lastchr) - 1] = null;
        error(elongstring);
       }
       wl = wl + 1;
@@ -1360,9 +1428,9 @@ nexttoken(realok)
     Caseerror(Line);
    }
  }
- if ((*G185_lastchr) == 0)
-  (*G185_lastchr) = 1;
- lasttok.A[(*G185_lastchr) - 1] = null;
+ if ((*G207_lastchr) == 0)
+  (*G207_lastchr) = 1;
+ lasttok.A[(*G207_lastchr) - 1] = null;
 }
 
  void
@@ -1370,13 +1438,13 @@ nextsymbol(ss)
  symset ss;
 {
  unsigned char lastchr;
- unsigned char *F186;
+ unsigned char *F208;
 
- F186 = G185_lastchr;
- G185_lastchr = &lastchr;
+ F208 = G207_lastchr;
+ G207_lastchr = &lastchr;
  nexttoken((boolean)(Member((unsigned)(sreal), ss.S)));
  checksymbol(ss);
- G185_lastchr = F186;
+ G207_lastchr = F208;
 }
 
  treeptr
@@ -1919,6 +1987,12 @@ mknode(nt)
  tp->tnext = (struct S64 *)NIL;
  tp->tup = (struct S64 *)NIL;
  tp->ttype = (struct S64 *)NIL;
+ tp->tline = lastline;
+ tp->tcol = lastcol;
+ tp->tsemchecked = false;
+ tp->tsemchecking = false;
+ if (Member((unsigned)(nt), Conset[2]))
+  tp->U.V42.tuplusop = false;
  R98 = tp;
  return R98;
 }
@@ -1972,9 +2046,9 @@ lookupid(ip, fieldok)
 
  R100 = (struct S65 *)NIL;
  if (fieldok)
-  Setncpy(vs.S, Conset[2], sizeof(vs.S));
- else
   Setncpy(vs.S, Conset[3], sizeof(vs.S));
+ else
+  Setncpy(vs.S, Conset[4], sizeof(vs.S));
  sp = (struct S65 *)NIL;
  dp = symtab;
  while (dp != (struct S63 *)NIL) {
@@ -2004,7 +2078,7 @@ lookuplabel(i)
  while (dp != (struct S63 *)NIL) {
   sp = dp->ddecl.A[hashmax];
   while (sp != (struct S65 *)NIL) {
-   if ((Member((unsigned)(sp->lt), Conset[4])) && (sp->U.V9.lno == i))
+   if ((Member((unsigned)(sp->lt), Conset[5])) && (sp->U.V9.lno == i))
     goto L999;
    sp = sp->lnext;
   }
@@ -2113,7 +2187,7 @@ oldid(ip, l)
 
  sp = lookupid(ip, true);
  if (sp == (struct S65 *)NIL) {
-  if (Member((unsigned)(l), Conset[5])) {
+  if (Member((unsigned)(l), Conset[6])) {
    tp = newid(ip);
    tp->U.V43.tsym->lt = l;
   } else
@@ -2341,7 +2415,7 @@ pbody(tp)
   }
  }
  linkup(tp, tp->U.V13.tsubsub);
- checksymbol(*((symset *)SETALIGN(Conset[6])));
+ checksymbol(*((symset *)SETALIGN(Conset[7])));
  if (currsym.st == sbegin) {
   tp->U.V13.tsubstmt = pbegin(false);
   linkup(tp, tp->U.V13.tsubstmt);
@@ -2366,17 +2440,17 @@ pprmlist()
    defnams.A[(int)(dinput)]->U.V6.lused = true;
   else
    defnams.A[(int)(doutput)]->U.V6.lused = true;
-  nextsymbol(*((symset *)SETALIGN(Conset[7])));
+  nextsymbol(*((symset *)SETALIGN(Conset[8])));
   if (currsym.st == srpar)
    goto L999;
-  nextsymbol(*((symset *)SETALIGN(Conset[8])));
+  nextsymbol(*((symset *)SETALIGN(Conset[9])));
  }
  tq = newid(currsym.U.V1.vid);
  tq->U.V43.tsym->lt = lpointer;
  tp = tq;
- nextsymbol(*((symset *)SETALIGN(Conset[9])));
+ nextsymbol(*((symset *)SETALIGN(Conset[10])));
  while (currsym.st == scomma) {
-  nextsymbol(*((symset *)SETALIGN(Conset[10])));
+  nextsymbol(*((symset *)SETALIGN(Conset[11])));
   if (currsym.U.V1.vid == din)
    defnams.A[(int)(dinput)]->U.V6.lused = true;
   else
@@ -2387,7 +2461,7 @@ pprmlist()
     tq = tq->tnext;
     tq->U.V43.tsym->lt = lpointer;
    }
-  nextsymbol(*((symset *)SETALIGN(Conset[11])));
+  nextsymbol(*((symset *)SETALIGN(Conset[12])));
  }
 L999:
  R133 = tp;
@@ -2402,7 +2476,7 @@ pprogram()
 
  enterscope((declptr)NIL);
  tp = mknode(npgm);
- nextsymbol(*((symset *)SETALIGN(Conset[12])));
+ nextsymbol(*((symset *)SETALIGN(Conset[13])));
  tp->U.V13.tstat = statlvl;
  tp->U.V13.tsubid = mknode(nid);
  tp->U.V13.tsubid->tup = tp;
@@ -2410,18 +2484,18 @@ pprogram()
  tp->U.V13.tsubid->U.V43.tsym->U.V6.lid = currsym.U.V1.vid;
  tp->U.V13.tsubid->U.V43.tsym->lsymdecl = tp->U.V13.tsubid;
  linkup(tp, tp->U.V13.tsubid);
- nextsymbol(*((symset *)SETALIGN(Conset[13])));
+ nextsymbol(*((symset *)SETALIGN(Conset[14])));
  if (currsym.st == slpar) {
-  nextsymbol(*((symset *)SETALIGN(Conset[14])));
+  nextsymbol(*((symset *)SETALIGN(Conset[15])));
   tp->U.V13.tsubpar = pprmlist();
   linkup(tp, tp->U.V13.tsubpar);
-  nextsymbol(*((symset *)SETALIGN(Conset[15])));
+  nextsymbol(*((symset *)SETALIGN(Conset[16])));
  } else
   tp->U.V13.tsubpar = (struct S64 *)NIL;
- nextsymbol(*((symset *)SETALIGN(Conset[16])));
+ nextsymbol(*((symset *)SETALIGN(Conset[17])));
  pbody(tp);
- checksymbol(*((symset *)SETALIGN(Conset[17])));
- nextsymbol(*((symset *)SETALIGN(Conset[18])));
+ checksymbol(*((symset *)SETALIGN(Conset[18])));
+ nextsymbol(*((symset *)SETALIGN(Conset[19])));
  tp->U.V13.tscope = currscope();
  leavescope();
  R132 = tp;
@@ -2440,9 +2514,9 @@ pmodule()
  tp->U.V13.tsubid = (struct S64 *)NIL;
  tp->U.V13.tsubpar = (struct S64 *)NIL;
  pbody(tp);
- checksymbol(*((symset *)SETALIGN(Conset[19])));
+ checksymbol(*((symset *)SETALIGN(Conset[20])));
  if (currsym.st == ssemic)
-  nextsymbol(*((symset *)SETALIGN(Conset[20])));
+  nextsymbol(*((symset *)SETALIGN(Conset[21])));
  tp->U.V13.tscope = currscope();
  leavescope();
  R134 = tp;
@@ -2457,7 +2531,7 @@ plabel()
 
  tq = (struct S64 *)NIL;
  do {
-  nextsymbol(*((symset *)SETALIGN(Conset[21])));
+  nextsymbol(*((symset *)SETALIGN(Conset[22])));
   if (tq == (struct S64 *)NIL) {
    tq = newlbl();
    tp = tq;
@@ -2465,9 +2539,9 @@ plabel()
    tq->tnext = newlbl();
    tq = tq->tnext;
   }
-  nextsymbol(*((symset *)SETALIGN(Conset[22])));
+  nextsymbol(*((symset *)SETALIGN(Conset[23])));
  } while (!(currsym.st == ssemic));
- nextsymbol(*((symset *)SETALIGN(Conset[23])));
+ nextsymbol(*((symset *)SETALIGN(Conset[24])));
  R135 = tp;
  return R135;
 }
@@ -2482,13 +2556,13 @@ pidlist(l)
  tq = newid(currsym.U.V1.vid);
  tq->U.V43.tsym->lt = l;
  tp = tq;
- nextsymbol(*((symset *)SETALIGN(Conset[24])));
+ nextsymbol(*((symset *)SETALIGN(Conset[25])));
  while (currsym.st == scomma) {
-  nextsymbol(*((symset *)SETALIGN(Conset[25])));
+  nextsymbol(*((symset *)SETALIGN(Conset[26])));
   tq->tnext = newid(currsym.U.V1.vid);
   tq = tq->tnext;
   tq->U.V43.tsym->lt = l;
-  nextsymbol(*((symset *)SETALIGN(Conset[26])));
+  nextsymbol(*((symset *)SETALIGN(Conset[27])));
  }
  R136 = tp;
  return R136;
@@ -2501,7 +2575,7 @@ pconst()
  treeptr tp, tq;
 
  tq = (struct S64 *)NIL;
- nextsymbol(*((symset *)SETALIGN(Conset[27])));
+ nextsymbol(*((symset *)SETALIGN(Conset[28])));
  do {
   if (tq == (struct S64 *)NIL) {
    tq = mknode(nconst);
@@ -2513,11 +2587,11 @@ pconst()
    tq->U.V14.tattr = anone;
   }
   tq->U.V14.tidl = pidlist(lidentifier);
-  checksymbol(*((symset *)SETALIGN(Conset[28])));
-  nextsymbol(*((symset *)SETALIGN(Conset[29])));
-  tq->U.V14.tbind = pconstant(true);
+  checksymbol(*((symset *)SETALIGN(Conset[29])));
   nextsymbol(*((symset *)SETALIGN(Conset[30])));
+  tq->U.V14.tbind = pconstant(true);
   nextsymbol(*((symset *)SETALIGN(Conset[31])));
+  nextsymbol(*((symset *)SETALIGN(Conset[32])));
  } while (!(currsym.st != sid));
  R137 = tp;
  return R137;
@@ -2532,11 +2606,11 @@ pconstant(realok)
  boolean neg;
 
  neg = (boolean)(currsym.st == sminus);
- if (Member((unsigned)(currsym.st), Conset[32]))
+ if (Member((unsigned)(currsym.st), Conset[33]))
   if (realok)
-   nextsymbol(*((symset *)SETALIGN(Conset[33])));
-  else
    nextsymbol(*((symset *)SETALIGN(Conset[34])));
+  else
+   nextsymbol(*((symset *)SETALIGN(Conset[35])));
  if (currsym.st == sid)
   tp = oldid(currsym.U.V1.vid, lidentifier);
  else
@@ -2583,7 +2657,7 @@ precord(cs, dp)
    tq->U.V14.tattr = anone;
   }
   tq->U.V14.tidl = pidlist(lfield);
-  checksymbol(*((symset *)SETALIGN(Conset[35])));
+  checksymbol(*((symset *)SETALIGN(Conset[36])));
   leavescope();
   tq->U.V14.tbind = ptypedef();
   enterscope(dp);
@@ -2593,9 +2667,9 @@ precord(cs, dp)
     (void)Insmem((unsigned)(cs), Tmpset), Tmpset))));
  }
  if (currsym.st == scase) {
-  nextsymbol(*((symset *)SETALIGN(Conset[36])));
-  tsym = currsym;
   nextsymbol(*((symset *)SETALIGN(Conset[37])));
+  tsym = currsym;
+  nextsymbol(*((symset *)SETALIGN(Conset[38])));
   if (currsym.st == scolon) {
    tv = newid(tsym.U.V1.vid);
    if (tq == (struct S64 *)NIL) {
@@ -2607,11 +2681,11 @@ precord(cs, dp)
    }
    tq->U.V14.tidl = tv;
    tv->U.V43.tsym->lt = lfield;
-   nextsymbol(*((symset *)SETALIGN(Conset[38])));
+   nextsymbol(*((symset *)SETALIGN(Conset[39])));
    leavescope();
    tq->U.V14.tbind = oldid(currsym.U.V1.vid, lidentifier);
    enterscope(dp);
-   nextsymbol(*((symset *)SETALIGN(Conset[39])));
+   nextsymbol(*((symset *)SETALIGN(Conset[40])));
   }
   tq = (struct S64 *)NIL;
   do {
@@ -2632,9 +2706,9 @@ precord(cs, dp)
      tv->tnext = pconstant(false);
      tv = tv->tnext;
     }
-    nextsymbol(*((symset *)SETALIGN(Conset[40])));
+    nextsymbol(*((symset *)SETALIGN(Conset[41])));
    } while (!(currsym.st == scolon));
-   nextsymbol(*((symset *)SETALIGN(Conset[41])));
+   nextsymbol(*((symset *)SETALIGN(Conset[42])));
    if (tq == (struct S64 *)NIL) {
     tq = mknode(nvariant);
     tp->U.V21.tvlist = tq;
@@ -2651,7 +2725,7 @@ L999:
   tp->U.V21.trscope = dp;
   leavescope();
  }
- nextsymbol(*((symset *)SETALIGN(Conset[42])));
+ nextsymbol(*((symset *)SETALIGN(Conset[43])));
  R139 = tp;
  return R139;
 }
@@ -2664,22 +2738,22 @@ ptypedef()
  symtyp st;
  symset ss;
 
- nextsymbol(*((symset *)SETALIGN(Conset[43])));
+ nextsymbol(*((symset *)SETALIGN(Conset[44])));
  if (currsym.st == spacked)
-  nextsymbol(*((symset *)SETALIGN(Conset[44])));
- Setncpy(ss.S, Conset[45], sizeof(ss.S));
+  nextsymbol(*((symset *)SETALIGN(Conset[45])));
+ Setncpy(ss.S, Conset[46], sizeof(ss.S));
  switch ((int)(currsym.st)) {
    case splus:  case sminus:  case schar:  case sinteger:
    case sid:
   st = currsym.st;
   tp = pconstant(false);
   if (st == sid)
-   nextsymbol(*((symset *)SETALIGN(Union(Conset[46], ss.S))));
+   nextsymbol(*((symset *)SETALIGN(Union(Conset[47], ss.S))));
   else
-   nextsymbol(*((symset *)SETALIGN(Conset[47])));
+   nextsymbol(*((symset *)SETALIGN(Conset[48])));
   Claimset();
   if (currsym.st == sdotdot) {
-   nextsymbol(*((symset *)SETALIGN(Conset[48])));
+   nextsymbol(*((symset *)SETALIGN(Conset[49])));
    tq = mknode(nsubrange);
    tq->U.V19.tlo = tp;
    tq->U.V19.thi = pconstant(false);
@@ -2689,20 +2763,20 @@ ptypedef()
   break ;
    case slpar:
   tp = mknode(nscalar);
-  nextsymbol(*((symset *)SETALIGN(Conset[49])));
+  nextsymbol(*((symset *)SETALIGN(Conset[50])));
   tp->U.V17.tscalid = pidlist(lidentifier);
-  checksymbol(*((symset *)SETALIGN(Conset[50])));
+  checksymbol(*((symset *)SETALIGN(Conset[51])));
   nextsymbol(ss);
   break ;
    case sarrow:
   tp = mknode(nptr);
-  nextsymbol(*((symset *)SETALIGN(Conset[51])));
+  nextsymbol(*((symset *)SETALIGN(Conset[52])));
   tp->U.V16.tptrid = oldid(currsym.U.V1.vid, lpointer);
   tp->U.V16.tptrflag = false;
-  nextsymbol(*((symset *)SETALIGN(Conset[52])));
+  nextsymbol(*((symset *)SETALIGN(Conset[53])));
   break ;
    case sarray:
-  nextsymbol(*((symset *)SETALIGN(Conset[53])));
+  nextsymbol(*((symset *)SETALIGN(Conset[54])));
   tp = mknode(narray);
   tp->U.V23.taindx = ptypedef();
   tq = tp;
@@ -2711,8 +2785,8 @@ ptypedef()
    tq = tq->U.V23.taelem;
    tq->U.V23.taindx = ptypedef();
   }
-  checksymbol(*((symset *)SETALIGN(Conset[54])));
-  nextsymbol(*((symset *)SETALIGN(Conset[55])));
+  checksymbol(*((symset *)SETALIGN(Conset[55])));
+  nextsymbol(*((symset *)SETALIGN(Conset[56])));
   tq->U.V23.taelem = ptypedef();
   break ;
    case srecord:
@@ -2725,7 +2799,7 @@ ptypedef()
    tp = mknode(nsetof);
    usesets = true;
   }
-  nextsymbol(*((symset *)SETALIGN(Conset[56])));
+  nextsymbol(*((symset *)SETALIGN(Conset[57])));
   tp->U.V18.tof = ptypedef();
   break ;
    default:
@@ -2742,7 +2816,7 @@ ptype()
  treeptr tp, tq;
 
  tq = (struct S64 *)NIL;
- nextsymbol(*((symset *)SETALIGN(Conset[57])));
+ nextsymbol(*((symset *)SETALIGN(Conset[58])));
  do {
   if (tq == (struct S64 *)NIL) {
    tq = mknode(ntype);
@@ -2754,9 +2828,9 @@ ptype()
    tq->U.V14.tattr = anone;
   }
   tq->U.V14.tidl = pidlist(lidentifier);
-  checksymbol(*((symset *)SETALIGN(Conset[58])));
+  checksymbol(*((symset *)SETALIGN(Conset[59])));
   tq->U.V14.tbind = ptypedef();
-  nextsymbol(*((symset *)SETALIGN(Conset[59])));
+  nextsymbol(*((symset *)SETALIGN(Conset[60])));
  } while (!(currsym.st != sid));
  R141 = tp;
  return R141;
@@ -2769,7 +2843,7 @@ pvar()
  treeptr ti, tp, tq;
 
  tq = (struct S64 *)NIL;
- nextsymbol(*((symset *)SETALIGN(Conset[60])));
+ nextsymbol(*((symset *)SETALIGN(Conset[61])));
  do {
   if (tq == (struct S64 *)NIL) {
    tq = mknode(nvar);
@@ -2782,15 +2856,15 @@ pvar()
   }
   ti = newid(currsym.U.V1.vid);
   tq->U.V14.tidl = ti;
-  nextsymbol(*((symset *)SETALIGN(Conset[61])));
+  nextsymbol(*((symset *)SETALIGN(Conset[62])));
   while (currsym.st == scomma) {
-   nextsymbol(*((symset *)SETALIGN(Conset[62])));
+   nextsymbol(*((symset *)SETALIGN(Conset[63])));
    ti->tnext = newid(currsym.U.V1.vid);
    ti = ti->tnext;
-   nextsymbol(*((symset *)SETALIGN(Conset[63])));
+   nextsymbol(*((symset *)SETALIGN(Conset[64])));
   }
   tq->U.V14.tbind = ptypedef();
-  nextsymbol(*((symset *)SETALIGN(Conset[64])));
+  nextsymbol(*((symset *)SETALIGN(Conset[65])));
  } while (!(currsym.st != sid));
  R142 = tp;
  return R142;
@@ -2809,7 +2883,7 @@ psubs()
   colsem = scolon;
  else
   colsem = ssemic;
- nextsymbol(*((symset *)SETALIGN(Conset[65])));
+ nextsymbol(*((symset *)SETALIGN(Conset[66])));
  tq = newid(currsym.U.V1.vid);
  if (tq->tup == (struct S64 *)NIL) {
   enterscope((declptr)NIL);
@@ -2829,13 +2903,13 @@ psubs()
   } else
    tp->U.V13.tsubpar = (struct S64 *)NIL;
   if (func) {
-   nextsymbol(*((symset *)SETALIGN(Conset[66])));
-   tp->U.V13.tfuntyp = oldid(currsym.U.V1.vid, lidentifier);
    nextsymbol(*((symset *)SETALIGN(Conset[67])));
+   tp->U.V13.tfuntyp = oldid(currsym.U.V1.vid, lidentifier);
+   nextsymbol(*((symset *)SETALIGN(Conset[68])));
   } else
    tp->U.V13.tfuntyp = mknode(nempty);
   linkup(tp, tp->U.V13.tfuntyp);
-  nextsymbol(*((symset *)SETALIGN(Conset[68])));
+  nextsymbol(*((symset *)SETALIGN(Conset[69])));
  } else {
   enterscope(tq->tup->U.V13.tscope);
   if (func)
@@ -2851,12 +2925,12 @@ psubs()
   }
   tp->U.V13.tsubid = tq;
   tq->tup = tp;
-  nextsymbol(*((symset *)SETALIGN(Conset[69])));
   nextsymbol(*((symset *)SETALIGN(Conset[70])));
+  nextsymbol(*((symset *)SETALIGN(Conset[71])));
  }
- if (Member((unsigned)(currsym.st), Conset[71])) {
+ if (Member((unsigned)(currsym.st), Conset[72])) {
   tp->U.V13.tsubid->U.V43.tsym->lt = lforward;
-  nextsymbol(*((symset *)SETALIGN(Conset[72])));
+  nextsymbol(*((symset *)SETALIGN(Conset[73])));
   tp->U.V13.tsublab = (struct S64 *)NIL;
   tp->U.V13.tsubconst = (struct S64 *)NIL;
   tp->U.V13.tsubtype = (struct S64 *)NIL;
@@ -2865,7 +2939,7 @@ psubs()
   tp->U.V13.tsubstmt = (struct S64 *)NIL;
  } else
   pbody(tp);
- nextsymbol(*((symset *)SETALIGN(Conset[73])));
+ nextsymbol(*((symset *)SETALIGN(Conset[74])));
  tp->U.V13.tscope = currscope();
  leavescope();
  R143 = tp;
@@ -2879,12 +2953,12 @@ pconfsub()
  treeptr tp;
 
  tp = mknode(nsubrange);
- nextsymbol(*((symset *)SETALIGN(Conset[74])));
- tp->U.V19.tlo = newid(currsym.U.V1.vid);
  nextsymbol(*((symset *)SETALIGN(Conset[75])));
+ tp->U.V19.tlo = newid(currsym.U.V1.vid);
  nextsymbol(*((symset *)SETALIGN(Conset[76])));
- tp->U.V19.thi = newid(currsym.U.V1.vid);
  nextsymbol(*((symset *)SETALIGN(Conset[77])));
+ tp->U.V19.thi = newid(currsym.U.V1.vid);
+ nextsymbol(*((symset *)SETALIGN(Conset[78])));
  R144 = tp;
  return R144;
 }
@@ -2895,25 +2969,25 @@ pconform()
  register treeptr R145;
  treeptr tp, tq;
 
- nextsymbol(*((symset *)SETALIGN(Conset[78])));
+ nextsymbol(*((symset *)SETALIGN(Conset[79])));
  tp = mknode(nconfarr);
  tp->U.V22.tcuid = mkvariable('S');
  tp->U.V22.tcindx = pconfsub();
- nextsymbol(*((symset *)SETALIGN(Conset[79])));
- tp->U.V22.tindtyp = oldid(currsym.U.V1.vid, lidentifier);
  nextsymbol(*((symset *)SETALIGN(Conset[80])));
+ tp->U.V22.tindtyp = oldid(currsym.U.V1.vid, lidentifier);
+ nextsymbol(*((symset *)SETALIGN(Conset[81])));
  tq = tp;
  while (currsym.st == ssemic) {
   error(econfconf);
   tq->U.V22.tcelem = mknode(nconfarr);
   tq = tq->U.V22.tcelem;
   tq->U.V22.tcindx = pconfsub();
-  nextsymbol(*((symset *)SETALIGN(Conset[81])));
-  tq->U.V22.tindtyp = oldid(currsym.U.V1.vid, lidentifier);
   nextsymbol(*((symset *)SETALIGN(Conset[82])));
+  tq->U.V22.tindtyp = oldid(currsym.U.V1.vid, lidentifier);
+  nextsymbol(*((symset *)SETALIGN(Conset[83])));
  }
- nextsymbol(*((symset *)SETALIGN(Conset[83])));
  nextsymbol(*((symset *)SETALIGN(Conset[84])));
+ nextsymbol(*((symset *)SETALIGN(Conset[85])));
  switch ((int)(currsym.st)) {
    case sid:
   tq->U.V22.tcelem = oldid(currsym.U.V1.vid, lidentifier);
@@ -2938,7 +3012,7 @@ psubpar()
 
  tq = (struct S64 *)NIL;
  do {
-  nextsymbol(*((symset *)SETALIGN(Conset[85])));
+  nextsymbol(*((symset *)SETALIGN(Conset[86])));
   switch ((int)(currsym.st)) {
     case sid:
    nt = nvalpar;
@@ -2956,7 +3030,7 @@ psubpar()
    Caseerror(Line);
   }
   if (nt != nvalpar)
-   nextsymbol(*((symset *)SETALIGN(Conset[86])));
+   nextsymbol(*((symset *)SETALIGN(Conset[87])));
   if (tq == (struct S64 *)NIL) {
    tq = mknode(nt);
    tp = tq;
@@ -2968,11 +3042,11 @@ psubpar()
     case nvarpar:  case nvalpar:
    tq->U.V14.tidl = pidlist(lidentifier);
    tq->U.V14.tattr = anone;
-   checksymbol(*((symset *)SETALIGN(Conset[87])));
+   checksymbol(*((symset *)SETALIGN(Conset[88])));
    if (nt == nvalpar)
-    nextsymbol(*((symset *)SETALIGN(Conset[88])));
-   else
     nextsymbol(*((symset *)SETALIGN(Conset[89])));
+   else
+    nextsymbol(*((symset *)SETALIGN(Conset[90])));
    switch ((int)(currsym.st)) {
      case sid:
     tq->U.V14.tbind = oldid(currsym.U.V1.vid, lidentifier);
@@ -2983,15 +3057,15 @@ psubpar()
      default:
     Caseerror(Line);
    }
-   nextsymbol(*((symset *)SETALIGN(Conset[90])));
+   nextsymbol(*((symset *)SETALIGN(Conset[91])));
    break ;
     case nparproc:
    tq->U.V15.tparid = newid(currsym.U.V1.vid);
-   nextsymbol(*((symset *)SETALIGN(Conset[91])));
+   nextsymbol(*((symset *)SETALIGN(Conset[92])));
    if (currsym.st == slpar) {
     enterscope((declptr)NIL);
     tq->U.V15.tparparm = psubpar();
-    nextsymbol(*((symset *)SETALIGN(Conset[92])));
+    nextsymbol(*((symset *)SETALIGN(Conset[93])));
     leavescope();
    } else
     tq->U.V15.tparparm = (struct S64 *)NIL;
@@ -2999,17 +3073,17 @@ psubpar()
    break ;
     case nparfunc:
    tq->U.V15.tparid = newid(currsym.U.V1.vid);
-   nextsymbol(*((symset *)SETALIGN(Conset[93])));
+   nextsymbol(*((symset *)SETALIGN(Conset[94])));
    if (currsym.st == slpar) {
     enterscope((declptr)NIL);
     tq->U.V15.tparparm = psubpar();
-    nextsymbol(*((symset *)SETALIGN(Conset[94])));
+    nextsymbol(*((symset *)SETALIGN(Conset[95])));
     leavescope();
    } else
     tq->U.V15.tparparm = (struct S64 *)NIL;
-   nextsymbol(*((symset *)SETALIGN(Conset[95])));
-   tq->U.V15.tpartyp = oldid(currsym.U.V1.vid, lidentifier);
    nextsymbol(*((symset *)SETALIGN(Conset[96])));
+   tq->U.V15.tpartyp = oldid(currsym.U.V1.vid, lidentifier);
+   nextsymbol(*((symset *)SETALIGN(Conset[97])));
    break ;
     default:
    Caseerror(Line);
@@ -3025,12 +3099,12 @@ plabstmt()
  register treeptr R147;
  treeptr tp;
 
- nextsymbol(*((symset *)SETALIGN(Conset[97])));
+ nextsymbol(*((symset *)SETALIGN(Conset[98])));
  if (currsym.st == sinteger) {
   tp = mknode(nlabstmt);
   tp->U.V25.tlabno = oldlbl(true);
-  nextsymbol(*((symset *)SETALIGN(Conset[98])));
   nextsymbol(*((symset *)SETALIGN(Conset[99])));
+  nextsymbol(*((symset *)SETALIGN(Conset[100])));
   tp->U.V25.tstmt = pstmt();
  } else
   tp = pstmt();
@@ -3104,10 +3178,10 @@ pvariable(varptr)
  treeptr varptr;
 {
  register treeptr R150;
- treeptr tp, tq;
+ treeptr tp, tq, tv;
 
- nextsymbol(*((symset *)SETALIGN(Conset[100])));
- if (Member((unsigned)(currsym.st), Conset[101])) {
+ nextsymbol(*((symset *)SETALIGN(Conset[101])));
+ if (Member((unsigned)(currsym.st), Conset[102])) {
   switch ((int)(currsym.st)) {
     case slpar:
    tp = mknode(ncall);
@@ -3129,19 +3203,27 @@ pvariable(varptr)
     tp = mknode(nindex);
     tp->U.V39.tvariable = tq;
     tp->U.V39.toffset = pexpr((treeptr)NIL);
+    tv = typeof(tq);
+    if (!((tv->tt == narray) || (tv->tt == nconfarr) || (tv == typnods.A[(int)(tstring)])))
+     error(eindex);
     tq = tp;
    } while (!(currsym.st == srbrack));
    break ;
     case sdot:
    tp = mknode(nselect);
    tp->U.V40.trecord = varptr;
-   nextsymbol(*((symset *)SETALIGN(Conset[102])));
+   nextsymbol(*((symset *)SETALIGN(Conset[103])));
    tq = typeof(varptr);
+   if (tq->tt != nrecord)
+    error(enotrecord);
    enterscope(tq->U.V21.trscope);
    tp->U.V40.tfield = oldid(currsym.U.V1.vid, lfield);
    leavescope();
    break ;
     case sarrow:
+   tq = typeof(varptr);
+   if (!((tq->tt == nptr) || (tq->tt == nfileof) || (tq == typnods.A[(int)(ttext)])))
+    error(enotpointer);
    tp = mknode(nderef);
    tp->U.V42.texps = varptr;
    break ;
@@ -3154,7 +3236,7 @@ pvariable(varptr)
   if (tp->tt == nid) {
    tq = idup(tp);
    if (tq != (struct S64 *)NIL)
-    if (Member((unsigned)(tq->tt), Conset[103])) {
+    if (Member((unsigned)(tq->tt), Conset[104])) {
      tp = mknode(ncall);
      tp->U.V30.tcall = varptr;
      tp->U.V30.taparm = (struct S64 *)NIL;
@@ -3174,13 +3256,13 @@ padjust(tu, tr)
  register treeptr R152;
 
  if (pprio.A[(int)(tu->tt) - (int)(nassign)] >= pprio.A[(int)(tr->tt) - (int)(nassign)]) {
-  if (Member((unsigned)(tr->tt), Conset[104]))
+  if (Member((unsigned)(tr->tt), Conset[105]))
    tr->U.V42.texps = padjust(tu, tr->U.V42.texps);
   else
    tr->U.V41.texpl = padjust(tu, tr->U.V41.texpl);
   R152 = tr;
  } else {
-  if (Member((unsigned)(tu->tt), Conset[105]))
+  if (Member((unsigned)(tu->tt), Conset[106]))
    tu->U.V42.texps = tr;
   else
    tu->U.V41.texpr = tr;
@@ -3198,11 +3280,12 @@ pexpr(tnp)
  treetyp nt;
  boolean next;
 
- nextsymbol(*((symset *)SETALIGN(Conset[106])));
+ nextsymbol(*((symset *)SETALIGN(Conset[107])));
  next = true;
  switch ((int)(currsym.st)) {
    case splus:
   tp = mknode(nuplus);
+  tp->U.V42.tuplusop = true;
   tp->U.V42.texps = (struct S64 *)NIL;
   tp = pexpr(tp);
   next = false;
@@ -3257,7 +3340,7 @@ pexpr(tnp)
   Caseerror(Line);
  }
  if (next)
-  nextsymbol(*((symset *)SETALIGN(Conset[107])));
+  nextsymbol(*((symset *)SETALIGN(Conset[108])));
  switch ((int)(currsym.st)) {
    case sdotdot:
   nt = nrange;
@@ -3322,7 +3405,7 @@ pexpr(tnp)
    default:
   Caseerror(Line);
  }
- if (Member((unsigned)(nt), Conset[108]))
+ if (Member((unsigned)(nt), Conset[109]))
   defnams.A[(int)(dboolean)]->U.V6.lused = true;
  if (nt != nnil) {
   tq = mknode(nt);
@@ -3344,7 +3427,7 @@ pcase()
 
  tp = mknode(ncase);
  tp->U.V35.tcasxp = pexpr((treeptr)NIL);
- checksymbol(*((symset *)SETALIGN(Conset[109])));
+ checksymbol(*((symset *)SETALIGN(Conset[110])));
  tq = (struct S64 *)NIL;
  do {
   if (tq == (struct S64 *)NIL) {
@@ -3358,8 +3441,8 @@ pcase()
   tq->U.V36.tchostmt = (struct S64 *)NIL;
   tv = (struct S64 *)NIL;
   do {
-   nextsymbol(*((symset *)SETALIGN(Conset[110])));
-   if (Member((unsigned)(currsym.st), Conset[111]))
+   nextsymbol(*((symset *)SETALIGN(Conset[111])));
+   if (Member((unsigned)(currsym.st), Conset[112]))
     goto L999;
    if (tv == (struct S64 *)NIL) {
     tv = pconstant(false);
@@ -3368,21 +3451,21 @@ pcase()
     tv->tnext = pconstant(false);
     tv = tv->tnext;
    }
-   nextsymbol(*((symset *)SETALIGN(Conset[112])));
+   nextsymbol(*((symset *)SETALIGN(Conset[113])));
   } while (!(currsym.st == scolon));
   tq->U.V36.tchostmt = plabstmt();
  } while (!(currsym.st == send));
 L999:
  if (currsym.st == sother) {
-  nextsymbol(*((symset *)SETALIGN(Conset[113])));
+  nextsymbol(*((symset *)SETALIGN(Conset[114])));
   if (currsym.st == scolon)
-   nextsymbol(*((symset *)SETALIGN(Conset[114])));
+   nextsymbol(*((symset *)SETALIGN(Conset[115])));
   tp->U.V35.tcasother = pstmt();
  } else {
   tp->U.V35.tcasother = (struct S64 *)NIL;
   usecase = true;
  }
- nextsymbol(*((symset *)SETALIGN(Conset[115])));
+ nextsymbol(*((symset *)SETALIGN(Conset[116])));
  R153 = tp;
  return R153;
 }
@@ -3395,7 +3478,7 @@ pif()
 
  tp = mknode(nif);
  tp->U.V31.tifxp = pexpr((treeptr)NIL);
- checksymbol(*((symset *)SETALIGN(Conset[116])));
+ checksymbol(*((symset *)SETALIGN(Conset[117])));
  tp->U.V31.tthen = plabstmt();
  if (currsym.st == selse)
   tp->U.V31.telse = plabstmt();
@@ -3413,7 +3496,7 @@ pwhile()
 
  tp = mknode(nwhile);
  tp->U.V32.twhixp = pexpr((treeptr)NIL);
- checksymbol(*((symset *)SETALIGN(Conset[117])));
+ checksymbol(*((symset *)SETALIGN(Conset[118])));
  tp->U.V32.twhistmt = plabstmt();
  R155 = tp;
  return R155;
@@ -3435,7 +3518,7 @@ prepeat()
    tq->tnext = plabstmt();
    tq = tq->tnext;
   }
-  checksymbol(*((symset *)SETALIGN(Conset[118])));
+  checksymbol(*((symset *)SETALIGN(Conset[119])));
  } while (!(currsym.st == suntil));
  tp->U.V33.treptxp = pexpr((treeptr)NIL);
  R156 = tp;
@@ -3449,14 +3532,14 @@ pfor()
  treeptr tp;
 
  tp = mknode(nfor);
- nextsymbol(*((symset *)SETALIGN(Conset[119])));
- tp->U.V34.tforid = oldid(currsym.U.V1.vid, lidentifier);
  nextsymbol(*((symset *)SETALIGN(Conset[120])));
+ tp->U.V34.tforid = oldid(currsym.U.V1.vid, lidentifier);
+ nextsymbol(*((symset *)SETALIGN(Conset[121])));
  tp->U.V34.tfrom = pexpr((treeptr)NIL);
- checksymbol(*((symset *)SETALIGN(Conset[121])));
+ checksymbol(*((symset *)SETALIGN(Conset[122])));
  tp->U.V34.tincr = (boolean)(currsym.st == sto);
  tp->U.V34.tto = pexpr((treeptr)NIL);
- checksymbol(*((symset *)SETALIGN(Conset[122])));
+ checksymbol(*((symset *)SETALIGN(Conset[123])));
  tp->U.V34.tforstmt = plabstmt();
  R157 = tp;
  return R157;
@@ -3481,8 +3564,10 @@ pwith()
   enterscope((declptr)NIL);
   tq->U.V38.tenv = currscope();
   tq->U.V38.texpw = pexpr((treeptr)NIL);
+  if (typeof(tq->U.V38.texpw)->tt != nrecord)
+   error(enotrecord);
   scopeup(tq->U.V38.texpw);
-  checksymbol(*((symset *)SETALIGN(Conset[123])));
+  checksymbol(*((symset *)SETALIGN(Conset[124])));
  } while (!(currsym.st == sdo));
  tp->U.V37.twithstmt = plabstmt();
  tq = tp->U.V37.twithvar;
@@ -3500,10 +3585,10 @@ pgoto()
  register treeptr R159;
  treeptr tp;
 
- nextsymbol(*((symset *)SETALIGN(Conset[124])));
+ nextsymbol(*((symset *)SETALIGN(Conset[125])));
  tp = mknode(ngoto);
  tp->U.V26.tlabel = oldlbl(false);
- nextsymbol(*((symset *)SETALIGN(Conset[125])));
+ nextsymbol(*((symset *)SETALIGN(Conset[126])));
  R159 = tp;
  return R159;
 }
@@ -3530,7 +3615,7 @@ pbegin(retain)
   tq->U.V24.tbegin = tp;
   tp = tq;
  }
- nextsymbol(*((symset *)SETALIGN(Conset[126])));
+ nextsymbol(*((symset *)SETALIGN(Conset[127])));
  R160 = tp;
  return R160;
 }
@@ -3538,30 +3623,1316 @@ pbegin(retain)
  void
 parse()
 {
- nextsymbol(*((symset *)SETALIGN(Conset[127])));
+ nextsymbol(*((symset *)SETALIGN(Conset[128])));
  if (currsym.st == spgm)
   top = pprogram();
  else
   top = pmodule();
 }
 
+integer cvalof();
+
+void semcheck();
+
+void checkexpr();
+
+void checkstmt();
+
+void checktype();
+
+ void
+semerror(tp, m)
+ treeptr tp;
+ errors m;
+{
+ if (tp != (struct S64 *)NIL) {
+  lastline = tp->tline;
+  lastcol = tp->tcol;
+ }
+ error(m);
+}
+
+ treeptr
+declof(tp)
+ treeptr tp;
+{
+ register treeptr R162;
+
+ if ((tp == (struct S64 *)NIL) || (tp->tt != nid))
+  R162 = (struct S64 *)NIL;
+ else
+  R162 = idup(tp);
+ return R162;
+}
+
+ boolean
+typeref(tp)
+ treeptr tp;
+{
+ register boolean R163;
+ treeptr tq;
+
+ if (tp == (struct S64 *)NIL)
+  R163 = false;
+ else {
+  switch ((int)(tp->tt)) {
+    case nid:
+   tq = idup(tp);
+   if (tq == (struct S64 *)NIL)
+    R163 = false;
+   else
+    R163 = (boolean)(tq->tt == ntype);
+   break ;
+    case npredef:  case nptr:  case nscalar:  case nrecord:
+    case nconfarr:  case narray:  case nfileof:  case nsetof:
+    case nsubrange:
+   R163 = true;
+   break ;
+    default:
+   R163 = false;
+  }
+ }
+ return R163;
+}
+
+ treeptr
+basetype(tp)
+ treeptr tp;
+{
+ register treeptr R164;
+ treeptr tq;
+
+ tq = typeof(tp);
+ while (tq->tt == nsubrange)
+  tq = typeof(tq->U.V19.tlo);
+ R164 = tq;
+ return R164;
+}
+
+ boolean
+ordinaltype(tp)
+ treeptr tp;
+{
+ register boolean R165;
+ treeptr tq;
+
+ tq = basetype(tp);
+ R165 = (boolean)((tq == typnods.A[(int)(tinteger)]) || (tq == typnods.A[(int)(tchar)]) || (tq == typnods.A[(int)(tboolean)]) || (tq->tt == nscalar));
+ return R165;
+}
+
+ boolean
+integertype(tp)
+ treeptr tp;
+{
+ register boolean R166;
+
+ R166 = (boolean)(basetype(tp) == typnods.A[(int)(tinteger)]);
+ return R166;
+}
+
+ boolean
+numerictype(tp)
+ treeptr tp;
+{
+ register boolean R167;
+ treeptr tq;
+
+ tq = basetype(tp);
+ R167 = (boolean)((tq == typnods.A[(int)(tinteger)]) || (tq == typnods.A[(int)(treal)]));
+ return R167;
+}
+
+ boolean
+filetype(tp)
+ treeptr tp;
+{
+ register boolean R168;
+ treeptr tq;
+
+ tq = typeof(tp);
+ R168 = (boolean)((tq == typnods.A[(int)(ttext)]) || (tq->tt == nfileof));
+ return R168;
+}
+
+ boolean
+chararray(tp)
+ treeptr tp;
+{
+ register boolean R169;
+ treeptr tq;
+
+ tq = typeof(tp);
+ if (tq->tt == narray)
+  R169 = (boolean)(basetype(tq->U.V23.taelem) == typnods.A[(int)(tchar)]);
+ else
+  if (tq->tt == nconfarr)
+   R169 = (boolean)(basetype(tq->U.V22.tcelem) == typnods.A[(int)(tchar)]);
+  else
+   R169 = false;
+ return R169;
+}
+
+ boolean
+sametype(tl, tr)
+ treeptr tl, tr;
+{
+ register boolean R170;
+ treeptr ta, tb;
+
+ ta = typeof(tl);
+ tb = typeof(tr);
+ if (ta == tb)
+  R170 = true;
+ else {
+  if (ta->tt == nsubrange)
+   ta = basetype(ta);
+  if (tb->tt == nsubrange)
+   tb = basetype(tb);
+  if (ta == tb)
+   R170 = true;
+  else
+   if ((ta->tt == nsetof) && (tb->tt == nsetof))
+    R170 = sametype(ta->U.V18.tof, tb->U.V18.tof);
+   else
+    R170 = false;
+ }
+ return R170;
+}
+
+ boolean
+identicaltype(tl, tr)
+ treeptr tl, tr;
+{
+ register boolean R171;
+ treeptr ta, tb;
+
+ ta = typeof(tl);
+ tb = typeof(tr);
+ if (ta == tb)
+  R171 = true;
+ else
+  if ((ta->tt == nconfarr) && (tb->tt == narray))
+   R171 = sametype(ta->U.V22.tcelem, tb->U.V23.taelem);
+  else
+   if ((ta->tt == narray) && (tb->tt == nconfarr))
+    R171 = sametype(ta->U.V23.taelem, tb->U.V22.tcelem);
+   else
+    R171 = false;
+ return R171;
+}
+
+ boolean
+assignable(tl, tr)
+ treeptr tl, tr;
+{
+ register boolean R172;
+ treeptr ta, tb;
+
+ ta = typeof(tl);
+ tb = typeof(tr);
+ if (sametype(ta, tb))
+  R172 = true;
+ else
+  if ((basetype(ta) == typnods.A[(int)(treal)]) && (basetype(tb) == typnods.A[(int)(tinteger)]))
+   R172 = true;
+  else
+   if ((ta->tt == nptr) && (tb == typnods.A[(int)(tnil)]))
+    R172 = true;
+   else
+    if ((ta->tt == nsetof) && (tb == typnods.A[(int)(tset)]))
+     R172 = true;
+    else
+     if (chararray(ta) && (tb == typnods.A[(int)(tstring)]))
+      R172 = true;
+     else
+      R172 = false;
+ return R172;
+}
+
+ boolean
+constant(tp)
+ treeptr tp;
+{
+ register boolean R173;
+ treeptr tq;
+
+ if (tp == (struct S64 *)NIL)
+  R173 = false;
+ else {
+  switch ((int)(tp->tt)) {
+    case ninteger:  case nreal:  case nchar:  case nstring:
+   R173 = true;
+   break ;
+    case nid:
+   tq = idup(tp);
+   if (tq == (struct S64 *)NIL)
+    R173 = false;
+   else
+    R173 = (boolean)(Member((unsigned)(tq->tt), Conset[129]));
+   break ;
+    case nuplus:  case numinus:  case nnot:
+   R173 = constant(tp->U.V42.texps);
+   break ;
+    default:
+   R173 = false;
+  }
+ }
+ return R173;
+}
+
+ boolean
+variable(tp, fn)
+ treeptr tp, fn;
+{
+ register boolean R174;
+ treeptr tq;
+
+ if (tp == (struct S64 *)NIL)
+  R174 = false;
+ else {
+  switch ((int)(tp->tt)) {
+    case nid:
+   tq = idup(tp);
+   if (tq == (struct S64 *)NIL)
+    R174 = false;
+   else
+    R174 = (boolean)(Member((unsigned)(tq->tt), Conset[130]));
+   break ;
+    case nindex:  case nselect:  case nderef:
+   R174 = true;
+   break ;
+    case ncall:
+   tq = idup(tp->U.V30.tcall);
+   R174 = (boolean)((tq == fn) && (tp->U.V30.taparm == (struct S64 *)NIL) && (fn != (struct S64 *)NIL) && (fn->tt == nfunc));
+   break ;
+    default:
+   R174 = false;
+  }
+ }
+ return R174;
+}
+
+ boolean
+functionresult(tp, fn)
+ treeptr tp, fn;
+{
+ register boolean R175;
+ treeptr tq;
+
+ R175 = false;
+ if ((tp != (struct S64 *)NIL) && (fn != (struct S64 *)NIL))
+  if (tp->tt == ncall) {
+   tq = idup(tp->U.V30.tcall);
+   if ((tq == fn) && (tp->U.V30.taparm == (struct S64 *)NIL))
+    R175 = true;
+  } else
+   if (tp->tt == nid)
+    if (idup(tp) == fn)
+     R175 = true;
+ return R175;
+}
+
+ treeptr
+setbase(tp)
+ treeptr tp;
+{
+ register treeptr R176;
+ treeptr tq;
+
+ tq = typeof(tp);
+ if (tq->tt == nsetof)
+  R176 = basetype(tq->U.V18.tof);
+ else
+  if (tp->tt == nset) {
+   tq = tp->U.V42.texps;
+   if (tq == (struct S64 *)NIL)
+    R176 = (struct S64 *)NIL;
+   else
+    if (tq->tt == nempty)
+     R176 = (struct S64 *)NIL;
+    else
+     if (tq->tt == nrange)
+      R176 = basetype(tq->U.V41.texpl);
+     else
+      R176 = basetype(tq);
+  } else
+   R176 = (struct S64 *)NIL;
+ return R176;
+}
+
+ boolean
+setcompatible(tl, tr)
+ treeptr tl, tr;
+{
+ register boolean R177;
+ treeptr ta, tb;
+
+ ta = setbase(tl);
+ tb = setbase(tr);
+ if ((ta == (struct S64 *)NIL) || (tb == (struct S64 *)NIL))
+  R177 = true;
+ else
+  R177 = sametype(ta, tb);
+ return R177;
+}
+
+ treeptr
+callarg(tp, n)
+ treeptr tp;
+ integer n;
+{
+ register treeptr R178;
+
+ while ((tp != (struct S64 *)NIL) && (n > 1)) {
+  tp = tp->tnext;
+  n = n - 1;
+ }
+ R178 = tp;
+ return R178;
+}
+
+ integer
+argcount(tp)
+ treeptr tp;
+{
+ register integer R179;
+ integer n;
+
+ n = 0;
+ while (tp != (struct S64 *)NIL) {
+  n = n + 1;
+  tp = tp->tnext;
+ }
+ R179 = n;
+ return R179;
+}
+
+ void
+firstformal(sp, fp, fi)
+ treeptr sp;
+ treeptr *fp, *fi;
+{
+ (*fp) = sp;
+ if ((*fp) == (struct S64 *)NIL)
+  (*fi) = (struct S64 *)NIL;
+ else
+  if (Member((unsigned)((*fp)->tt), Conset[131]))
+   (*fi) = (*fp)->U.V14.tidl;
+  else
+   (*fi) = (*fp)->U.V15.tparid;
+}
+
+ void
+nextformal(fp, fi)
+ treeptr *fp, *fi;
+{
+ if ((*fp) != (struct S64 *)NIL) {
+  if ((Member((unsigned)((*fp)->tt), Conset[132])) && ((*fi)->tnext != (struct S64 *)NIL))
+   (*fi) = (*fi)->tnext;
+  else {
+   (*fp) = (*fp)->tnext;
+   if ((*fp) == (struct S64 *)NIL)
+    (*fi) = (struct S64 *)NIL;
+   else
+    if (Member((unsigned)((*fp)->tt), Conset[133]))
+     (*fi) = (*fp)->U.V14.tidl;
+    else
+     (*fi) = (*fp)->U.V15.tparid;
+  }
+ }
+}
+
+ treeptr
+subdecl(tp)
+ treeptr tp;
+{
+ register treeptr R180;
+
+ if (tp == (struct S64 *)NIL)
+  R180 = (struct S64 *)NIL;
+ else
+  if (tp->tt == ncall)
+   R180 = idup(tp->U.V30.tcall);
+  else
+   if (tp->tt == nid)
+    R180 = idup(tp);
+   else
+    R180 = (struct S64 *)NIL;
+ return R180;
+}
+
+ boolean
+sameprofile(formal, actual)
+ treeptr formal, actual;
+{
+ register boolean R181;
+ treeptr fp, fi, ap, ai;
+ boolean good;
+
+ good = true;
+ if ((formal == (struct S64 *)NIL) || (actual == (struct S64 *)NIL))
+  good = false;
+ else
+  if ((formal->tt == nparproc) && !(Member((unsigned)(actual->tt), Conset[134])))
+   good = false;
+  else
+   if ((formal->tt == nparfunc) && !(Member((unsigned)(actual->tt), Conset[135])))
+    good = false;
+ if (good && (formal->tt == nparfunc))
+  if (actual->tt == nfunc)
+   good = sametype(formal->U.V15.tpartyp, actual->U.V13.tfuntyp);
+  else
+   good = sametype(formal->U.V15.tpartyp, actual->U.V15.tpartyp);
+ if (good) {
+  firstformal(formal->U.V15.tparparm, &fp, &fi);
+  if (Member((unsigned)(actual->tt), Conset[136]))
+   firstformal(actual->U.V13.tsubpar, &ap, &ai);
+  else
+   firstformal(actual->U.V15.tparparm, &ap, &ai);
+  while (good && (fi != (struct S64 *)NIL) && (ai != (struct S64 *)NIL)) {
+   if (fp->tt != ap->tt)
+    good = false;
+   else
+    if (Member((unsigned)(fp->tt), Conset[137]))
+     good = identicaltype(fp->U.V14.tbind, ap->U.V14.tbind);
+    else
+     good = sameprofile(fp, ap);
+   nextformal(&fp, &fi);
+   nextformal(&ap, &ai);
+  }
+  if ((fi != (struct S64 *)NIL) || (ai != (struct S64 *)NIL))
+   good = false;
+ }
+ R181 = good;
+ return R181;
+}
+
+ void
+checkset(tp, fn)
+ treeptr tp, fn;
+{
+ treeptr tq, tb, tx;
+
+ tb = (struct S64 *)NIL;
+ tq = tp->U.V42.texps;
+ while (tq != (struct S64 *)NIL) {
+  if (tq->tt == nempty) {
+   if (tq->tnext != (struct S64 *)NIL)
+    semerror(tq, eoperand);
+  } else
+   if (tq->tt == nrange) {
+    checkexpr(tq->U.V41.texpl, fn);
+    checkexpr(tq->U.V41.texpr, fn);
+    if (!ordinaltype(tq->U.V41.texpl))
+     semerror(tq, eoperand);
+    if (!sametype(tq->U.V41.texpl, tq->U.V41.texpr))
+     semerror(tq, eoperand);
+    tx = basetype(tq->U.V41.texpl);
+    if (constant(tq->U.V41.texpl) && constant(tq->U.V41.texpr))
+     if (cvalof(tq->U.V41.texpl) > cvalof(tq->U.V41.texpr))
+      semerror(tq, ebadrange);
+   } else {
+    checkexpr(tq, fn);
+    if (!ordinaltype(tq))
+     semerror(tq, eoperand);
+    tx = basetype(tq);
+   }
+  if (tq->tt != nempty)
+   if (tb == (struct S64 *)NIL)
+    tb = tx;
+   else
+    if (!sametype(tb, tx))
+     semerror(tq, eoperand);
+  tq = tq->tnext;
+ }
+}
+
+ void
+checkpredef(pd, cp, fn)
+ predefs pd;
+ treeptr cp, fn;
+{
+ treeptr a, f, tq;
+ integer n;
+
+ a = cp->U.V30.taparm;
+ n = argcount(a);
+ switch ((int)(pd)) {
+   case dabs:  case dsqr:
+  if (n != 1)
+   semerror(cp, eargcount);
+  checkexpr(a, fn);
+  if (!numerictype(a))
+   semerror(a, eargtype);
+  break ;
+   case darctan:  case dcos:  case dexp:  case dln:
+   case dsin:  case dsqrt:  case dtan:
+  if (n != 1)
+   semerror(cp, eargcount);
+  checkexpr(a, fn);
+  if (!numerictype(a))
+   semerror(a, eargtype);
+  break ;
+   case dchr:
+  if (n != 1)
+   semerror(cp, eargcount);
+  checkexpr(a, fn);
+  if (!ordinaltype(a))
+   semerror(a, eargtype);
+  break ;
+   case dord:  case dpred:  case dsucc:
+  if (n != 1)
+   semerror(cp, eargcount);
+  checkexpr(a, fn);
+  if (!ordinaltype(a))
+   semerror(a, eargtype);
+  break ;
+   case dodd:
+  if (n != 1)
+   semerror(cp, eargcount);
+  checkexpr(a, fn);
+  if (!integertype(a))
+   semerror(a, eargtype);
+  break ;
+   case dround:  case dtrunc:
+  if (n != 1)
+   semerror(cp, eargcount);
+  checkexpr(a, fn);
+  if (!numerictype(a))
+   semerror(a, eargtype);
+  break ;
+   case deof:  case deoln:  case dflush:  case dpage:
+  if (n > 1)
+   semerror(cp, eargcount);
+  if (a != (struct S64 *)NIL) {
+   checkexpr(a, fn);
+   if (!filetype(a))
+    semerror(a, eargtype);
+  }
+  break ;
+   case dexit:
+  if (n > 1)
+   semerror(cp, eargcount);
+  if (a != (struct S64 *)NIL) {
+   checkexpr(a, fn);
+   if (!integertype(a))
+    semerror(a, eargtype);
+  }
+  break ;
+   case dhalt:
+  if (n != 0)
+   semerror(cp, eargcount);
+  break ;
+   case dget:  case dput:  case dclose:
+  if (n != 1)
+   semerror(cp, eargcount);
+  checkexpr(a, fn);
+  if (!filetype(a))
+   semerror(a, eargtype);
+  if (!variable(a, fn))
+   semerror(a, eidkind);
+  break ;
+   case ddispose:
+  if (n != 1)
+   semerror(cp, eargcount);
+  checkexpr(a, fn);
+  if (typeof(a)->tt != nptr)
+   semerror(a, eargtype);
+  break ;
+   case dnew:
+  if (n < 1)
+   semerror(cp, eargcount);
+  checkexpr(a, fn);
+  if (!variable(a, fn))
+   semerror(a, eidkind);
+  if (typeof(a)->tt != nptr)
+   semerror(a, eargtype);
+  tq = a->tnext;
+  while (tq != (struct S64 *)NIL) {
+   checkexpr(tq, fn);
+   if (!constant(tq))
+    semerror(tq, econstexpected);
+   tq = tq->tnext;
+  }
+  break ;
+   case dargv:
+  if (n != 2)
+   semerror(cp, eargcount);
+  checkexpr(a, fn);
+  if (!integertype(a))
+   semerror(a, eargtype);
+  tq = a->tnext;
+  checkexpr(tq, fn);
+  if (!variable(tq, fn))
+   semerror(tq, eidkind);
+  if (!chararray(tq))
+   semerror(tq, eargtype);
+  break ;
+   case dreset:  case drewrite:
+  if ((n < 1) || (n > 2))
+   semerror(cp, eargcount);
+  checkexpr(a, fn);
+  if (!filetype(a))
+   semerror(a, eargtype);
+  if (!variable(a, fn))
+   semerror(a, eidkind);
+  tq = a->tnext;
+  if (tq != (struct S64 *)NIL) {
+   checkexpr(tq, fn);
+   if (!((basetype(tq) == typnods.A[(int)(tchar)]) || (typeof(tq) == typnods.A[(int)(tstring)]) || chararray(tq)))
+    semerror(tq, eargtype);
+  }
+  break ;
+   case dread:  case dreadln:
+  tq = a;
+  if (tq != (struct S64 *)NIL)
+   if (filetype(tq)) {
+    checkexpr(tq, fn);
+    tq = tq->tnext;
+   }
+  while (tq != (struct S64 *)NIL) {
+   if (tq->tt == nformat)
+    f = tq->U.V41.texpl;
+   else
+    f = tq;
+   checkexpr(f, fn);
+   if (!variable(f, fn))
+    semerror(f, eidkind);
+   tq = tq->tnext;
+  }
+  break ;
+   case dwrite:  case dwriteln:  case dmessage:
+  tq = a;
+  if ((pd != dmessage) && (tq != (struct S64 *)NIL))
+   if (filetype(tq)) {
+    checkexpr(tq, fn);
+    tq = tq->tnext;
+   }
+  while (tq != (struct S64 *)NIL) {
+   checkexpr(tq, fn);
+   f = typeof(tq);
+   if (tq->tt == nformat)
+    f = typeof(tq->U.V41.texpl);
+   if (!((basetype(f) == typnods.A[(int)(tinteger)]) || (basetype(f) == typnods.A[(int)(tchar)]) || (basetype(f) == typnods.A[(int)(treal)]) || (basetype(f) == typnods.A[(int)(tboolean)]) || (f == typnods.A[(int)(tstring)]) || (f->tt == narray) || (f->tt == nconfarr)))
+    semerror(tq, eargtype);
+   tq = tq->tnext;
+  }
+  break ;
+   case dpack:
+  if (n != 3)
+   semerror(cp, eargcount);
+  tq = callarg(a, 1);
+  checkexpr(tq, fn);
+  if (!(Member((unsigned)(typeof(tq)->tt), Conset[138])))
+   semerror(tq, eargtype);
+  tq = callarg(a, 2);
+  checkexpr(tq, fn);
+  if (!ordinaltype(tq))
+   semerror(tq, eargtype);
+  tq = callarg(a, 3);
+  checkexpr(tq, fn);
+  if (!variable(tq, fn))
+   semerror(tq, eidkind);
+  if (!(Member((unsigned)(typeof(tq)->tt), Conset[139])))
+   semerror(tq, eargtype);
+  break ;
+   case dunpack:
+  if (n != 3)
+   semerror(cp, eargcount);
+  tq = callarg(a, 1);
+  checkexpr(tq, fn);
+  if (!(Member((unsigned)(typeof(tq)->tt), Conset[140])))
+   semerror(tq, eargtype);
+  tq = callarg(a, 2);
+  checkexpr(tq, fn);
+  if (!variable(tq, fn))
+   semerror(tq, eidkind);
+  if (!(Member((unsigned)(typeof(tq)->tt), Conset[141])))
+   semerror(tq, eargtype);
+  tq = callarg(a, 3);
+  checkexpr(tq, fn);
+  if (!ordinaltype(tq))
+   semerror(tq, eargtype);
+  break ;
+   default:
+{
+   tq = a;
+   while (tq != (struct S64 *)NIL) {
+    checkexpr(tq, fn);
+    tq = tq->tnext;
+   }
+  }
+ }
+}
+
+ void
+checkcall(cp, fn, expression)
+ treeptr cp, fn;
+ boolean expression;
+{
+ treeptr sd, fp, fi, ap, ad;
+ predefs pd;
+
+ if ((cp->U.V30.tcall == (struct S64 *)NIL) || (cp->U.V30.tcall->tt != nid))
+  semerror(cp, ecalltarget);
+ sd = idup(cp->U.V30.tcall);
+ if (sd == (struct S64 *)NIL)
+  semerror(cp, ecalltarget);
+ if (!(Member((unsigned)(sd->tt), Conset[142])))
+  semerror(cp, ecalltarget);
+ if (expression) {
+  if (Member((unsigned)(sd->tt), Conset[143]))
+   semerror(cp, eprocexpr);
+ } else
+  if (Member((unsigned)(sd->tt), Conset[144]))
+   semerror(cp, efuncstmt);
+ if ((Member((unsigned)(sd->tt), Conset[145])) && (sd->U.V13.tsubstmt != (struct S64 *)NIL) && (sd->U.V13.tsubstmt->tt == npredef)) {
+  pd = sd->U.V13.tsubstmt->U.V12.tdef;
+  checkpredef(pd, cp, fn);
+ } else {
+  if (Member((unsigned)(sd->tt), Conset[146]))
+   firstformal(sd->U.V13.tsubpar, &fp, &fi);
+  else
+   firstformal(sd->U.V15.tparparm, &fp, &fi);
+  ap = cp->U.V30.taparm;
+  while ((fi != (struct S64 *)NIL) && (ap != (struct S64 *)NIL)) {
+   if (Member((unsigned)(fp->tt), Conset[147])) {
+    checkexpr(ap, fn);
+    if (fp->tt == nvarpar) {
+     if (!variable(ap, fn))
+      semerror(ap, evarpar);
+     if (!identicaltype(fp->U.V14.tbind, ap))
+      semerror(ap, eargtype);
+    } else
+     if (!assignable(fp->U.V14.tbind, ap))
+      semerror(ap, eargtype);
+   } else {
+    ad = subdecl(ap);
+    if (ad == (struct S64 *)NIL)
+     semerror(ap, eargtype);
+    if (!sameprofile(fp, ad))
+     semerror(ap, eargtype);
+   }
+   nextformal(&fp, &fi);
+   ap = ap->tnext;
+  }
+  if ((fi != (struct S64 *)NIL) || (ap != (struct S64 *)NIL))
+   semerror(cp, eargcount);
+ }
+}
+
+ void
+checkexpr(tp, fn)
+ treeptr tp, fn;
+{
+ treeptr tl, tr, tq, ti;
+
+ if (tp == (struct S64 *)NIL)
+  semerror(tp, eoperand);
+ switch ((int)(tp->tt)) {
+   case nid:
+  tq = idup(tp);
+  if (tq == (struct S64 *)NIL)
+   semerror(tp, eidkind);
+  if (!(Member((unsigned)(tq->tt), Conset[148])))
+   semerror(tp, eidkind);
+  break ;
+   case ninteger:  case nreal:  case nchar:  case nstring:
+   case nnil:
+  break ;
+   case ncall:
+  checkcall(tp, fn, true);
+  break ;
+   case nuplus:
+  checkexpr(tp->U.V42.texps, fn);
+  if (tp->U.V42.tuplusop)
+   if (!numerictype(tp->U.V42.texps))
+    semerror(tp, eoperand);
+  break ;
+   case numinus:
+  checkexpr(tp->U.V42.texps, fn);
+  if (!numerictype(tp->U.V42.texps))
+   semerror(tp, eoperand);
+  break ;
+   case nnot:
+  checkexpr(tp->U.V42.texps, fn);
+  if (basetype(tp->U.V42.texps) != typnods.A[(int)(tboolean)])
+   semerror(tp, eboolxp);
+  break ;
+   case nplus:  case nminus:  case nmul:
+  checkexpr(tp->U.V41.texpl, fn);
+  checkexpr(tp->U.V41.texpr, fn);
+  tl = typeof(tp->U.V41.texpl);
+  tr = typeof(tp->U.V41.texpr);
+  if (numerictype(tl) && numerictype(tr))
+   ;
+  else
+   if (((tl->tt == nsetof) || (tl == typnods.A[(int)(tset)])) && ((tr->tt == nsetof) || (tr == typnods.A[(int)(tset)]))) {
+    if (!setcompatible(tp->U.V41.texpl, tp->U.V41.texpr))
+     semerror(tp, eoperand);
+   } else
+    semerror(tp, eoperand);
+  break ;
+   case ndiv:  case nmod:
+  checkexpr(tp->U.V41.texpl, fn);
+  checkexpr(tp->U.V41.texpr, fn);
+  if (!integertype(tp->U.V41.texpl) || !integertype(tp->U.V41.texpr))
+   semerror(tp, eoperand);
+  break ;
+   case nquot:
+  checkexpr(tp->U.V41.texpl, fn);
+  checkexpr(tp->U.V41.texpr, fn);
+  if (!numerictype(tp->U.V41.texpl) || !numerictype(tp->U.V41.texpr))
+   semerror(tp, eoperand);
+  break ;
+   case nand:  case nor:
+  checkexpr(tp->U.V41.texpl, fn);
+  checkexpr(tp->U.V41.texpr, fn);
+  if ((basetype(tp->U.V41.texpl) != typnods.A[(int)(tboolean)]) || (basetype(tp->U.V41.texpr) != typnods.A[(int)(tboolean)]))
+   semerror(tp, eboolxp);
+  break ;
+   case neq:  case nne:  case nlt:  case nle:
+   case ngt:  case nge:
+  checkexpr(tp->U.V41.texpl, fn);
+  checkexpr(tp->U.V41.texpr, fn);
+  tl = typeof(tp->U.V41.texpl);
+  tr = typeof(tp->U.V41.texpr);
+  if (numerictype(tl) && numerictype(tr))
+   ;
+  else
+   if (ordinaltype(tl) && ordinaltype(tr) && sametype(tl, tr))
+    ;
+   else
+    if (((tl->tt == nptr) && (tr == typnods.A[(int)(tnil)])) || ((tr->tt == nptr) && (tl == typnods.A[(int)(tnil)])) || ((tl->tt == nptr) && sametype(tl, tr))) {
+     if (!(Member((unsigned)(tp->tt), Conset[149])))
+      semerror(tp, eoperand);
+    } else
+     if (((tl->tt == nsetof) || (tl == typnods.A[(int)(tset)])) && ((tr->tt == nsetof) || (tr == typnods.A[(int)(tset)]))) {
+      if (!(Member((unsigned)(tp->tt), Conset[150])))
+       semerror(tp, eoperand);
+      if (!setcompatible(tp->U.V41.texpl, tp->U.V41.texpr))
+       semerror(tp, eoperand);
+     } else
+      if (((tl == typnods.A[(int)(tstring)]) || chararray(tl)) && ((tr == typnods.A[(int)(tstring)]) || chararray(tr)))
+       ;
+      else
+       semerror(tp, eoperand);
+  break ;
+   case nin:
+  checkexpr(tp->U.V41.texpl, fn);
+  checkexpr(tp->U.V41.texpr, fn);
+  if (!ordinaltype(tp->U.V41.texpl))
+   semerror(tp, eoperand);
+  tr = typeof(tp->U.V41.texpr);
+  if (!((tr->tt == nsetof) || (tr == typnods.A[(int)(tset)])))
+   semerror(tp, eoperand);
+  tq = setbase(tp->U.V41.texpr);
+  if (tq != (struct S64 *)NIL)
+   if (!sametype(tp->U.V41.texpl, tq))
+    semerror(tp, eoperand);
+  break ;
+   case nset:
+  checkset(tp, fn);
+  break ;
+   case nrange:
+  semerror(tp, eoperand);
+  break ;
+   case nformat:
+  checkexpr(tp->U.V41.texpl, fn);
+  checkexpr(tp->U.V41.texpr, fn);
+  if (!integertype(tp->U.V41.texpr))
+   semerror(tp, eargtype);
+  break ;
+   case nindex:
+  checkexpr(tp->U.V39.tvariable, fn);
+  checkexpr(tp->U.V39.toffset, fn);
+  tq = typeof(tp->U.V39.tvariable);
+  if (tq->tt == narray)
+   ti = tq->U.V23.taindx;
+  else
+   if (tq->tt == nconfarr)
+    ti = tq->U.V22.tindtyp;
+   else
+    if (tq == typnods.A[(int)(tstring)])
+     ti = typnods.A[(int)(tinteger)];
+    else
+     semerror(tp, eindex);
+  if (!ordinaltype(tp->U.V39.toffset))
+   semerror(tp, eindex);
+  if (!sametype(ti, tp->U.V39.toffset))
+   semerror(tp, eindex);
+  break ;
+   case nselect:
+  checkexpr(tp->U.V40.trecord, fn);
+  tq = typeof(tp->U.V40.trecord);
+  if (tq->tt != nrecord)
+   semerror(tp, enotrecord);
+  if (declof(tp->U.V40.tfield)->tt != nfield)
+   semerror(tp, eidkind);
+  break ;
+   case nderef:
+  checkexpr(tp->U.V42.texps, fn);
+  tq = typeof(tp->U.V42.texps);
+  if (!((tq->tt == nptr) || (tq->tt == nfileof) || (tq == typnods.A[(int)(ttext)])))
+   semerror(tp, enotpointer);
+  break ;
+   case nempty:
+  semerror(tp, eoperand);
+  break ;
+   default:
+  semerror(tp, eoperand);
+ }
+ tq = typeof(tp);
+}
+
+ void
+checktype(tp)
+ treeptr tp;
+{
+ treeptr tq, ti, tb;
+
+ if (tp == (struct S64 *)NIL)
+  semerror(tp, etypeexpected);
+ if (!tp->tsemchecked) {
+  if (!tp->tsemchecking) {
+   tp->tsemchecking = true;
+   switch ((int)(tp->tt)) {
+     case nid:
+    tq = idup(tp);
+    if ((tq == (struct S64 *)NIL) || (tq->tt != ntype))
+     semerror(tp, etypeexpected);
+    checktype(tq->U.V14.tbind);
+    break ;
+     case npredef:
+    break ;
+     case nptr:
+    checktype(tp->U.V16.tptrid);
+    break ;
+     case nscalar:
+    break ;
+     case nsubrange:
+    if (!constant(tp->U.V19.tlo) || !constant(tp->U.V19.thi))
+     semerror(tp, econstexpected);
+    if (!ordinaltype(tp->U.V19.tlo) || !ordinaltype(tp->U.V19.thi))
+     semerror(tp, ebadrange);
+    if (!sametype(tp->U.V19.tlo, tp->U.V19.thi))
+     semerror(tp, ebadrange);
+    if (cvalof(tp->U.V19.tlo) > cvalof(tp->U.V19.thi))
+     semerror(tp, ebadrange);
+    break ;
+     case narray:
+    checktype(tp->U.V23.taindx);
+    if (!ordinaltype(tp->U.V23.taindx))
+     semerror(tp, eindex);
+    checktype(tp->U.V23.taelem);
+    break ;
+     case nconfarr:
+    checktype(tp->U.V22.tindtyp);
+    if (!ordinaltype(tp->U.V22.tindtyp))
+     semerror(tp, eindex);
+    checktype(tp->U.V22.tcelem);
+    break ;
+     case nsetof:
+    checktype(tp->U.V18.tof);
+    if (!ordinaltype(tp->U.V18.tof))
+     semerror(tp, eoperand);
+    break ;
+     case nfileof:
+    checktype(tp->U.V18.tof);
+    break ;
+     case nrecord:
+    tq = tp->U.V21.tflist;
+    while (tq != (struct S64 *)NIL) {
+     if (!typeref(tq->U.V14.tbind))
+      semerror(tq, etypeexpected);
+     checktype(tq->U.V14.tbind);
+     tq = tq->tnext;
+    }
+    tq = tp->U.V21.tvlist;
+    tb = (struct S64 *)NIL;
+    while (tq != (struct S64 *)NIL) {
+     ti = tq->U.V20.tselct;
+     while (ti != (struct S64 *)NIL) {
+      if (!constant(ti))
+       semerror(ti, econstexpected);
+      if (!ordinaltype(ti))
+       semerror(ti, ecasetype);
+      if (tb == (struct S64 *)NIL)
+       tb = basetype(ti);
+      else
+       if (!sametype(tb, ti))
+        semerror(ti, ecasetype);
+      ti = ti->tnext;
+     }
+     checktype(tq->U.V20.tvrnt);
+     tq = tq->tnext;
+    }
+    break ;
+     default:
+    semerror(tp, etypeexpected);
+   }
+   tp->tsemchecking = false;
+   tp->tsemchecked = true;
+  }
+ }
+}
+
+ void
+checktypedecls(tp)
+ treeptr tp;
+{
+ while (tp != (struct S64 *)NIL) {
+  if (!typeref(tp->U.V14.tbind))
+   semerror(tp, etypeexpected);
+  checktype(tp->U.V14.tbind);
+  tp = tp->tnext;
+ }
+}
+
+ void
+checkconstants(tp, fn)
+ treeptr tp, fn;
+{
+ while (tp != (struct S64 *)NIL) {
+  if (!constant(tp->U.V14.tbind))
+   semerror(tp, econstexpected);
+  checkexpr(tp->U.V14.tbind, fn);
+  tp = tp->tnext;
+ }
+}
+
+ void
+checkparams(tp)
+ treeptr tp;
+{
+ while (tp != (struct S64 *)NIL) {
+  switch ((int)(tp->tt)) {
+    case nvalpar:  case nvarpar:
+   if (!typeref(tp->U.V14.tbind))
+    semerror(tp, etypeexpected);
+   checktype(tp->U.V14.tbind);
+   break ;
+    case nparproc:
+   checkparams(tp->U.V15.tparparm);
+   break ;
+    case nparfunc:
+   checkparams(tp->U.V15.tparparm);
+   if (!typeref(tp->U.V15.tpartyp))
+    semerror(tp, efunrtype);
+   checktype(tp->U.V15.tpartyp);
+   break ;
+    default:
+   Caseerror(Line);
+  }
+  tp = tp->tnext;
+ }
+}
+
+ boolean
+resulttype(tp)
+ treeptr tp;
+{
+ register boolean R182;
+ treeptr tq;
+
+ tq = typeof(tp);
+ R182 = (boolean)(!(Member((unsigned)(tq->tt), Conset[151])));
+ return R182;
+}
+
+ void
+checkcase(tp, fn, assigned)
+ treeptr tp, fn;
+ boolean *assigned;
+{
+ treeptr tq, ti, cq, ci;
+ treeptr st;
+
+ checkexpr(tp->U.V35.tcasxp, fn);
+ st = basetype(tp->U.V35.tcasxp);
+ if (!ordinaltype(st))
+  semerror(tp, ecasetype);
+ tq = tp->U.V35.tcaslst;
+ while (tq != (struct S64 *)NIL) {
+  ti = tq->U.V36.tchocon;
+  while (ti != (struct S64 *)NIL) {
+   if (!constant(ti))
+    semerror(ti, econstexpected);
+   checkexpr(ti, fn);
+   if (!sametype(st, ti))
+    semerror(ti, ecasetype);
+   cq = tp->U.V35.tcaslst;
+   while (cq != tq) {
+    ci = cq->U.V36.tchocon;
+    while (ci != (struct S64 *)NIL) {
+     if (cvalof(ci) == cvalof(ti))
+      semerror(ti, edupcase);
+     ci = ci->tnext;
+    }
+    cq = cq->tnext;
+   }
+   ci = tq->U.V36.tchocon;
+   while (ci != ti) {
+    if (cvalof(ci) == cvalof(ti))
+     semerror(ti, edupcase);
+    ci = ci->tnext;
+   }
+   ti = ti->tnext;
+  }
+  checkstmt(tq->U.V36.tchostmt, fn, &(*assigned));
+  tq = tq->tnext;
+ }
+ checkstmt(tp->U.V35.tcasother, fn, &(*assigned));
+}
+
+ void
+checkstmt(tp, fn, assigned)
+ treeptr tp, fn;
+ boolean *assigned;
+{
+ treeptr tq, ti, ct;
+
+ while (tp != (struct S64 *)NIL) {
+  switch ((int)(tp->tt)) {
+    case nempty:  case ngoto:
+   break ;
+    case nlabstmt:
+   checkstmt(tp->U.V25.tstmt, fn, &(*assigned));
+   break ;
+    case nbegin:
+   checkstmt(tp->U.V24.tbegin, fn, &(*assigned));
+   break ;
+    case nassign:
+   checkexpr(tp->U.V27.trhs, fn);
+   if (functionresult(tp->U.V27.tlhs, fn)) {
+    if (!assignable(fn->U.V13.tfuntyp, tp->U.V27.trhs))
+     semerror(tp, easgntype);
+    (*assigned) = true;
+   } else {
+    if (!variable(tp->U.V27.tlhs, fn))
+     semerror(tp->U.V27.tlhs, eidkind);
+    checkexpr(tp->U.V27.tlhs, fn);
+    if (!assignable(tp->U.V27.tlhs, tp->U.V27.trhs))
+     semerror(tp, easgntype);
+   }
+   break ;
+    case ncall:
+   checkcall(tp, fn, false);
+   break ;
+    case nif:
+   checkexpr(tp->U.V31.tifxp, fn);
+   if (basetype(tp->U.V31.tifxp) != typnods.A[(int)(tboolean)])
+    semerror(tp, eboolxp);
+   checkstmt(tp->U.V31.tthen, fn, &(*assigned));
+   checkstmt(tp->U.V31.telse, fn, &(*assigned));
+   break ;
+    case nwhile:
+   checkexpr(tp->U.V32.twhixp, fn);
+   if (basetype(tp->U.V32.twhixp) != typnods.A[(int)(tboolean)])
+    semerror(tp, eboolxp);
+   checkstmt(tp->U.V32.twhistmt, fn, &(*assigned));
+   break ;
+    case nrepeat:
+   checkstmt(tp->U.V33.treptstmt, fn, &(*assigned));
+   checkexpr(tp->U.V33.treptxp, fn);
+   if (basetype(tp->U.V33.treptxp) != typnods.A[(int)(tboolean)])
+    semerror(tp, eboolxp);
+   break ;
+    case nfor:
+   if (!variable(tp->U.V34.tforid, fn))
+    semerror(tp, eforctrl);
+   checkexpr(tp->U.V34.tforid, fn);
+   checkexpr(tp->U.V34.tfrom, fn);
+   checkexpr(tp->U.V34.tto, fn);
+   ct = typeof(tp->U.V34.tforid);
+   if (!ordinaltype(ct))
+    semerror(tp, eforctrl);
+   if (!assignable(ct, tp->U.V34.tfrom) || !assignable(ct, tp->U.V34.tto))
+    semerror(tp, eforctrl);
+   checkstmt(tp->U.V34.tforstmt, fn, &(*assigned));
+   break ;
+    case ncase:
+   checkcase(tp, fn, &(*assigned));
+   break ;
+    case nwith:
+   tq = tp->U.V37.twithvar;
+   while (tq != (struct S64 *)NIL) {
+    checkexpr(tq->U.V38.texpw, fn);
+    if (typeof(tq->U.V38.texpw)->tt != nrecord)
+     semerror(tq, enotrecord);
+    if (!variable(tq->U.V38.texpw, fn))
+     semerror(tq, eidkind);
+    tq = tq->tnext;
+   }
+   checkstmt(tp->U.V37.twithstmt, fn, &(*assigned));
+   break ;
+    default:
+   semerror(tp, eidkind);
+  }
+  tp = tp->tnext;
+ }
+}
+
+ void
+checksub(tp)
+ treeptr tp;
+{
+ treeptr tq;
+ boolean assigned;
+
+ while (tp != (struct S64 *)NIL) {
+  checkparams(tp->U.V13.tsubpar);
+  if (tp->tt == nfunc) {
+   if (!typeref(tp->U.V13.tfuntyp))
+    semerror(tp, efunrtype);
+   checktype(tp->U.V13.tfuntyp);
+   if (!resulttype(tp->U.V13.tfuntyp))
+    semerror(tp, efunrtype);
+  }
+  checkconstants(tp->U.V13.tsubconst, tp);
+  checktypedecls(tp->U.V13.tsubtype);
+  checktypedecls(tp->U.V13.tsubvar);
+  checksub(tp->U.V13.tsubsub);
+  assigned = false;
+  checkstmt(tp->U.V13.tsubstmt, tp, &assigned);
+  if ((tp->tt == nfunc) && (tp->U.V13.tsubstmt != (struct S64 *)NIL))
+   if (!assigned)
+    semerror(tp, enofunresult);
+  tp = tp->tnext;
+ }
+}
+
+ void
+semcheck()
+{
+ boolean assigned;
+
+ checkconstants(top->U.V13.tsubconst, top);
+ checktypedecls(top->U.V13.tsubtype);
+ checktypedecls(top->U.V13.tsubvar);
+ checksub(top->U.V13.tsubsub);
+ assigned = false;
+ checkstmt(top->U.V13.tsubstmt, top, &assigned);
+}
+
  integer
 cvalof(tp)
  treeptr tp;
 {
- register integer R161;
+ register integer R183;
  integer v;
  treeptr tq;
 
  switch ((int)(tp->tt)) {
    case nuplus:
-  R161 = cvalof(tp->U.V42.texps);
+  R183 = cvalof(tp->U.V42.texps);
   break ;
    case numinus:
-  R161 = -cvalof(tp->U.V42.texps);
+  R183 = -cvalof(tp->U.V42.texps);
   break ;
    case nnot:
-  R161 = 1 - cvalof(tp->U.V42.texps);
+  R183 = 1 - cvalof(tp->U.V42.texps);
   break ;
    case nid:
   tq = idup(tp);
@@ -3579,59 +4950,59 @@ cvalof(tp)
      v = v + 1;
      tq = tq->tnext;
     }
-   R161 = v;
+   R183 = v;
    break ;
     case nconst:
-   R161 = cvalof(tq->U.V14.tbind);
+   R183 = cvalof(tq->U.V14.tbind);
    break ;
     default:
    Caseerror(Line);
   }
   break ;
    case ninteger:
-  R161 = tp->U.V43.tsym->U.V10.linum;
+  R183 = tp->U.V43.tsym->U.V10.linum;
   break ;
    case nchar:
-  R161 = (unsigned)(tp->U.V43.tsym->U.V11.lchar);
+  R183 = (unsigned)(tp->U.V43.tsym->U.V11.lchar);
   break ;
    default:
   Caseerror(Line);
  }
- return R161;
+ return R183;
 }
 
  integer
 clower(tp)
  treeptr tp;
 {
- register integer R162;
+ register integer R184;
  treeptr tq;
 
  tq = typeof(tp);
  if (tq->tt == nscalar)
-  R162 = scalbase;
+  R184 = scalbase;
  else
   if (tq->tt == nsubrange)
    if (tq->tup->tt == nconfarr)
-    R162 = 0;
+    R184 = 0;
    else
-    R162 = cvalof(tq->U.V19.tlo);
+    R184 = cvalof(tq->U.V19.tlo);
   else
    if (tq == typnods.A[(int)(tchar)])
-    R162 = 0;
+    R184 = 0;
    else
     if (tq == typnods.A[(int)(tinteger)])
-     R162 = -maxint;
+     R184 = -maxint;
     else
      fatal(etree);
- return R162;
+ return R184;
 }
 
  integer
 cupper(tp)
  treeptr tp;
 {
- register integer R163;
+ register integer R185;
  treeptr tq;
  integer i;
 
@@ -3643,52 +5014,52 @@ cupper(tp)
    i = i + 1;
    tq = tq->tnext;
   }
-  R163 = i;
+  R185 = i;
  } else
   if (tq->tt == nsubrange)
    if (tq->tup->tt == nconfarr)
     fatal(euprconf);
    else
-    R163 = cvalof(tq->U.V19.thi);
+    R185 = cvalof(tq->U.V19.thi);
   else
    if (tq == typnods.A[(int)(tchar)])
-    R163 = maxchar;
+    R185 = maxchar;
    else
     if (tq == typnods.A[(int)(tinteger)])
-     R163 = maxint;
+     R185 = maxint;
     else
      fatal(etree);
- return R163;
+ return R185;
 }
 
  integer
 crange(tp)
  treeptr tp;
 {
- register integer R164;
+ register integer R186;
 
- R164 = cupper(tp) - clower(tp) + 1;
- return R164;
+ R186 = cupper(tp) - clower(tp) + 1;
+ return R186;
 }
 
  integer
 csetwords(i)
  integer i;
 {
- register integer R165;
+ register integer R187;
 
  i = (i + (C37_setbits)) / (C37_setbits + 1);
  if (i > maxsetrange)
   error(esetsize);
- R165 = i;
- return R165;
+ R187 = i;
+ return R187;
 }
 
  integer
 csetsize(tp)
  treeptr tp;
 {
- register integer R166;
+ register integer R188;
  treeptr tq;
  integer i;
 
@@ -3696,24 +5067,24 @@ csetsize(tp)
  i = clower(tq);
  if ((i < 0) || (i >= 6 * (C37_setbits + 1)))
   error(esetbase);
- R166 = csetwords(crange(tq)) + 1;
- return R166;
+ R188 = csetwords(crange(tq)) + 1;
+ return R188;
 }
 
  boolean
 islocal(tp)
  treeptr tp;
 {
- register boolean R167;
+ register boolean R189;
  treeptr tq;
 
  tq = tp->U.V43.tsym->lsymdecl;
- while (!(Member((unsigned)(tq->tt), Conset[128])))
+ while (!(Member((unsigned)(tq->tt), Conset[152])))
   tq = tq->tup;
- while (!(Member((unsigned)(tp->tt), Conset[129])))
+ while (!(Member((unsigned)(tp->tt), Conset[153])))
   tp = tp->tup;
- R167 = (boolean)(tp == tq);
- return R167;
+ R189 = (boolean)(tp == tq);
+ return R189;
 }
 
 void transform();
@@ -3767,10 +5138,10 @@ crtnvar(tp)
     tp->U.V27.tlhs = tp->U.V27.tlhs->U.V30.tcall;
     tp->U.V27.tlhs->tup = tp;
    }
-   (*G191_tv) = tp->U.V27.tlhs;
-   if ((*G191_tv)->tt == nid)
-    if ((*G191_tv)->U.V43.tsym == (*G187_ip))
-     (*G191_tv)->U.V43.tsym = (*G189_iq);
+   (*G213_tv) = tp->U.V27.tlhs;
+   if ((*G213_tv)->tt == nid)
+    if ((*G213_tv)->U.V43.tsym == (*G209_ip))
+     (*G213_tv)->U.V43.tsym = (*G211_iq);
    break ;
     case nbreak:  case npush:  case npop:  case ngoto:
     case nempty:  case ncall:
@@ -3788,16 +5159,16 @@ renamf(tp)
 {
  symptr ip, iq;
  treeptr tq, tv;
- symptr *F188;
- symptr *F190;
- treeptr *F192;
+ symptr *F210;
+ symptr *F212;
+ treeptr *F214;
 
- F192 = G191_tv;
- G191_tv = &tv;
- F190 = G189_iq;
- G189_iq = &iq;
- F188 = G187_ip;
- G187_ip = &ip;
+ F214 = G213_tv;
+ G213_tv = &tv;
+ F212 = G211_iq;
+ G211_iq = &iq;
+ F210 = G209_ip;
+ G209_ip = &ip;
  while (tp != (struct S64 *)NIL) {
   switch ((int)(tp->tt)) {
     case npgm:  case nproc:
@@ -3812,8 +5183,8 @@ renamf(tp)
    tq->U.V14.tbind = tp->U.V13.tfuntyp;
    tq->tnext = tp->U.V13.tsubvar;
    tp->U.V13.tsubvar = tq;
-   (*G189_iq) = tq->U.V14.tidl->U.V43.tsym;
-   (*G187_ip) = tp->U.V13.tsubid->U.V43.tsym;
+   (*G211_iq) = tq->U.V14.tidl->U.V43.tsym;
+   (*G209_ip) = tp->U.V13.tsubid->U.V43.tsym;
    crtnvar(tp->U.V13.tsubsub);
    crtnvar(tp->U.V13.tsubstmt);
    renamf(tp->U.V13.tsubsub);
@@ -3823,9 +5194,9 @@ renamf(tp)
   }
   tp = tp->tnext;
  }
- G187_ip = F188;
- G189_iq = F190;
- G191_tv = F192;
+ G209_ip = F210;
+ G211_iq = F212;
+ G213_tv = F214;
 }
 
 void extract();
@@ -3835,7 +5206,7 @@ xtrit(tp, pp, last)
  treeptr tp, pp;
  boolean last;
 {
- register treeptr R168;
+ register treeptr R190;
  treeptr np, rp;
  idptr ip;
 
@@ -3859,8 +5230,8 @@ xtrit(tp, pp, last)
   np->tnext = pp->U.V13.tsubtype;
   pp->U.V13.tsubtype = np;
  }
- R168 = rp;
- return R168;
+ R190 = rp;
+ return R190;
 }
 
 treeptr xtrenum();
@@ -3879,7 +5250,7 @@ nametype(tp)
 xtrenum(tp, pp)
  treeptr tp, pp;
 {
- register treeptr R169;
+ register treeptr R191;
 
  if (tp != (struct S64 *)NIL) {
   switch ((int)(tp->tt)) {
@@ -3915,8 +5286,8 @@ xtrenum(tp, pp)
   }
   tp->tnext = xtrenum(tp->tnext, pp);
  }
- R169 = tp;
- return R169;
+ R191 = tp;
+ return R191;
 }
 
  void
@@ -3930,7 +5301,7 @@ extract(tp)
   tp->U.V13.tsubvar = xtrenum(tp->U.V13.tsubvar, tp);
   vp = tp->U.V13.tsubvar;
   while (vp != (struct S64 *)NIL) {
-   if (Member((unsigned)(vp->U.V14.tbind->tt), Conset[130]))
+   if (Member((unsigned)(vp->U.V14.tbind->tt), Conset[154]))
     vp->U.V14.tbind = xtrit(vp->U.V14.tbind, tp, true);
    vp = vp->tnext;
   }
@@ -3997,7 +5368,7 @@ markdecl(xp)
 movedecl(tp)
  treeptr tp;
 {
- register treeptr R170;
+ register treeptr R192;
  treeptr ip, np;
  symptr sp;
  boolean move;
@@ -4056,8 +5427,8 @@ movedecl(tp)
   } else
    tp->tnext = movedecl(tp->tnext);
  }
- R170 = tp;
- return R170;
+ R192 = tp;
+ return R192;
 }
 
 void movevars();
@@ -4077,11 +5448,11 @@ moveglob(tp, dp)
 stackop(decl, glob, loc)
  treeptr decl, glob, loc;
 {
- register treeptr R171;
+ register treeptr R193;
  treeptr op, ip, dp, tp;
 
  ip = newid(mkvariable('F'));
- switch ((int)((*G193_vp)->tt)) {
+ switch ((int)((*G215_vp)->tt)) {
    case nvarpar:  case nvalpar:  case nvar:
   dp = mknode(nvarpar);
   dp->U.V14.tattr = areference;
@@ -4089,17 +5460,17 @@ stackop(decl, glob, loc)
   dp->U.V14.tbind = decl->U.V14.tbind;
   break ;
    case nparproc:  case nparfunc:
-  dp = mknode((*G193_vp)->tt);
+  dp = mknode((*G215_vp)->tt);
   dp->U.V15.tparid = ip;
   dp->U.V15.tparparm = (struct S64 *)NIL;
-  dp->U.V15.tpartyp = (*G193_vp)->U.V15.tpartyp;
+  dp->U.V15.tpartyp = (*G215_vp)->U.V15.tpartyp;
   break ;
    default:
   Caseerror(Line);
  }
  ip->tup = dp;
  tp = decl;
- while (!(Member((unsigned)(tp->tt), Conset[131])))
+ while (!(Member((unsigned)(tp->tt), Conset[155])))
   tp = tp->tup;
  dp->tup = tp;
  if (tp->U.V13.tsubvar == (struct S64 *)NIL)
@@ -4115,8 +5486,8 @@ stackop(decl, glob, loc)
  op->U.V28.tglob = glob;
  op->U.V28.tloc = loc;
  op->U.V28.ttmp = ip;
- R171 = op;
- return R171;
+ R193 = op;
+ return R193;
 }
 
  void
@@ -4145,21 +5516,21 @@ movevars(tp, vp)
  treeptr ep, dp, np;
  idptr ip;
  symptr sp;
- treeptr *F194;
+ treeptr *F216;
 
- F194 = G193_vp;
- G193_vp = &vp;
- while ((*G193_vp) != (struct S64 *)NIL) {
-  switch ((int)((*G193_vp)->tt)) {
+ F216 = G215_vp;
+ G215_vp = &vp;
+ while ((*G215_vp) != (struct S64 *)NIL) {
+  switch ((int)((*G215_vp)->tt)) {
     case nvar:  case nvalpar:  case nvarpar:
-   dp = (*G193_vp)->U.V14.tidl;
+   dp = (*G215_vp)->U.V14.tidl;
    break ;
     case nparproc:  case nparfunc:
-   dp = (*G193_vp)->U.V15.tparid;
+   dp = (*G215_vp)->U.V15.tparid;
    if (dp->U.V43.tsym->U.V6.lused) {
-    ep = mknode((*G193_vp)->tt);
+    ep = mknode((*G215_vp)->tt);
     ep->U.V15.tparparm = (struct S64 *)NIL;
-    ep->U.V15.tpartyp = (*G193_vp)->U.V15.tpartyp;
+    ep->U.V15.tpartyp = (*G215_vp)->U.V15.tpartyp;
     np = newid(mkrename('G', dp->U.V43.tsym->U.V6.lid));
     ep->U.V15.tparid = np;
     np->tup = ep;
@@ -4172,7 +5543,7 @@ movevars(tp, vp)
     np->U.V43.tsym->lsymdecl = np;
     dp->U.V43.tsym->lsymdecl = dp;
     moveglob(tp, ep);
-    addcode(tp, stackop((*G193_vp), np, dp));
+    addcode(tp, stackop((*G215_vp), np, dp));
    }
    goto L555;
    break ;
@@ -4186,7 +5557,7 @@ movevars(tp, vp)
     np = newid(mkrename('G', dp->U.V43.tsym->U.V6.lid));
     ep->U.V14.tidl = np;
     np->tup = ep;
-    ep->U.V14.tbind = (*G193_vp)->U.V14.tbind;
+    ep->U.V14.tbind = (*G215_vp)->U.V14.tbind;
     if (ep->U.V14.tbind->tt == nid)
      ep->U.V14.tbind->U.V43.tsym->U.V6.lused = true;
     sp = np->U.V43.tsym;
@@ -4199,14 +5570,14 @@ movevars(tp, vp)
     dp->U.V43.tsym->lsymdecl = dp;
     dp->tup->U.V14.tattr = aextern;
     moveglob(tp, ep);
-    addcode(tp, stackop((*G193_vp), np, dp));
+    addcode(tp, stackop((*G215_vp), np, dp));
    }
    dp = dp->tnext;
   }
  L555:
-  (*G193_vp) = (*G193_vp)->tnext;
+  (*G215_vp) = (*G215_vp)->tnext;
  }
- G193_vp = F194;
+ G215_vp = F216;
 }
 
  void
@@ -4245,7 +5616,7 @@ cklevel(tp)
  treeptr tp;
 {
  tp = tp->U.V43.tsym->lsymdecl;
- while (!(Member((unsigned)(tp->tt), Conset[132])))
+ while (!(Member((unsigned)(tp->tt), Conset[156])))
   tp = tp->tup;
  if (tp->U.V13.tstat > maxlevel)
   maxlevel = tp->U.V13.tstat;
@@ -4349,7 +5720,7 @@ global(tp, dp, depend)
    break ;
     case nfor:
    ip = idup(tp->U.V34.tforid);
-   if (Member((unsigned)(ip->tup->tt), Conset[133]))
+   if (Member((unsigned)(ip->tup->tt), Conset[157]))
     registervar(tp->U.V34.tforid);
    global(tp->U.V34.tforid, dp, depend);
    global(tp->U.V34.tfrom, dp, depend);
@@ -4424,7 +5795,7 @@ global(tp, dp, depend)
     ip = ip->tup;
     if (ip == (struct S64 *)NIL)
      goto L555;
-   } while (!(Member((unsigned)(ip->tt), Conset[134])));
+   } while (!(Member((unsigned)(ip->tt), Conset[158])));
    if (dp == ip) {
     if (depend)
      tp->U.V43.tsym->U.V6.lused = true;
@@ -4495,7 +5866,7 @@ void initcode();
 filevar(tp)
  treeptr tp;
 {
- register boolean R172;
+ register boolean R194;
  boolean fv;
  treeptr tq;
 
@@ -4544,8 +5915,8 @@ filevar(tp)
    default:
   Caseerror(Line);
  }
- R172 = fv;
- return R172;
+ R194 = fv;
+ return R194;
 }
 
  treeptr
@@ -4553,7 +5924,7 @@ fileinit(ti, tq, opn)
  treeptr ti, tq;
  boolean opn;
 {
- register treeptr R173;
+ register treeptr R195;
  treeptr tx, ty, tz;
 
  switch ((int)(tq->tt)) {
@@ -4564,7 +5935,7 @@ fileinit(ti, tq, opn)
   ty->U.V14.tidl = tz;
   ty->U.V14.tbind = typeof(tq->U.V23.taindx);
   tz = tq;
-  while (!(Member((unsigned)(tz->tt), Conset[135])))
+  while (!(Member((unsigned)(tz->tt), Conset[159])))
    tz = tz->tup;
   linkup(tz, ty);
   if (tz->U.V13.tsubvar == (struct S64 *)NIL)
@@ -4654,8 +6025,8 @@ fileinit(ti, tq, opn)
    default:
   Caseerror(Line);
  }
- R173 = tx;
- return R173;
+ R195 = tx;
+ return R195;
 }
 
  void
@@ -4705,13 +6076,13 @@ void emit();
  void
 increment()
 {
- (*G208_indnt) = (*G208_indnt) + indstep;
+ (*G230_indnt) = (*G230_indnt) + indstep;
 }
 
  void
 decrement()
 {
- (*G208_indnt) = (*G208_indnt) - indstep;
+ (*G230_indnt) = (*G230_indnt) - indstep;
 }
 
  void
@@ -4719,7 +6090,7 @@ indent()
 {
  integer i;
 
- i = (*G208_indnt);
+ i = (*G230_indnt);
  if (i > 60)
   i = i / tabwidth * tabwidth;
  while (i >= tabwidth) {
@@ -4736,7 +6107,7 @@ indent()
 arithexpr(tp)
  treeptr tp;
 {
- register boolean R174;
+ register boolean R196;
 
  tp = typeof(tp);
  if (tp->tt == nsubrange)
@@ -4744,8 +6115,8 @@ arithexpr(tp)
    tp = typeof(tp->tup->U.V22.tindtyp);
   else
    tp = typeof(tp->U.V19.tlo);
- R174 = (boolean)((tp == typnods.A[(int)(tinteger)]) || (tp == typnods.A[(int)(tchar)]) || (tp == typnods.A[(int)(treal)]));
- return R174;
+ R196 = (boolean)((tp == typnods.A[(int)(tinteger)]) || (tp == typnods.A[(int)(tchar)]) || (tp == typnods.A[(int)(treal)]));
+ return R196;
 }
 
 void eexpr();
@@ -4758,14 +6129,14 @@ eselect(tp)
 {
  boolean da;
 
- da = (*G204_doarrow);
- (*G204_doarrow) = true;
+ da = (*G226_doarrow);
+ (*G226_doarrow) = true;
  eexpr(tp);
- if ((*G206_donearr))
-  (*G206_donearr) = false;
+ if ((*G228_donearr))
+  (*G228_donearr) = false;
  else
   Putchr('.', output);
- (*G204_doarrow) = da;
+ (*G226_doarrow) = da;
 }
 
 void epredef();
@@ -4774,13 +6145,13 @@ void epredef();
 typeletter(tp)
  treeptr tp;
 {
- register char R175;
+ register char R197;
  treeptr tq;
 
  tq = tp;
  if (tq->tt == nformat) {
   if (tq->U.V41.texpl->tt == nformat) {
-   R175 = 'f';
+   R197 = 'f';
    goto L999;
   }
   tq = tp->U.V41.texpl;
@@ -4789,36 +6160,36 @@ typeletter(tp)
  if (tq->tt == nsubrange)
   tq = typeof(tq->U.V19.tlo);
  if (tq == typnods.A[(int)(tstring)])
-  R175 = 's';
+  R197 = 's';
  else
   if (tq == typnods.A[(int)(tinteger)])
-   R175 = 'd';
+   R197 = 'd';
   else
    if (tq == typnods.A[(int)(tchar)])
-    R175 = 'c';
+    R197 = 'c';
    else
     if (tq == typnods.A[(int)(treal)])
      if (tp->tt == nformat)
-      R175 = 'e';
+      R197 = 'e';
      else
-      R175 = 'g';
+      R197 = 'g';
     else
      if (tq == typnods.A[(int)(tboolean)]) {
-      R175 = 'b';
-      (*G195_nelems) = 6;
+      R197 = 'b';
+      (*G217_nelems) = 6;
      } else
       if (tq->tt == narray) {
-       R175 = 'a';
-       (*G195_nelems) = crange(tq->U.V23.taindx);
+       R197 = 'a';
+       (*G217_nelems) = crange(tq->U.V23.taindx);
       } else
        if (tq->tt == nconfarr) {
-        R175 = 'v';
-        (*G195_nelems) = 0;
+        R197 = 'v';
+        (*G217_nelems) = 0;
        } else
         fatal(etree);
 L999:
  ;
- return R175;
+ return R197;
 }
 
  void
@@ -4880,7 +6251,7 @@ eformat(tq)
     eexpr(tq->U.V41.texpr);
    else
     Putchr('*', output);
-  (void)fprintf(output.fp, ".%1ds", (*G195_nelems)), Putl(output, 0);
+  (void)fprintf(output.fp, ".%1ds", (*G217_nelems)), Putl(output, 0);
   break ;
    case 'b':
   Putchr(percent, output);
@@ -5191,10 +6562,10 @@ epredef(ts, tp)
  integer nelems;
  char ch;
  boolean txtfile;
- integer *F196;
+ integer *F218;
 
- F196 = G195_nelems;
- G195_nelems = &nelems;
+ F218 = G217_nelems;
+ G217_nelems = &nelems;
  td = ts->U.V13.tsubstmt->U.V12.tdef;
  switch ((int)(td)) {
    case dabs:
@@ -5479,7 +6850,7 @@ epredef(ts, tp)
   }
   if (txtfile) {
    if (tq == (struct S64 *)NIL) {
-    if (Member((unsigned)(td), Conset[136])) {
+    if (Member((unsigned)(td), Conset[160])) {
      (void)fprintf(output.fp, "Putchr(%s, ", nlchr), Putl(output, 0);
      if (tv == (struct S64 *)NIL)
       printid(defnams.A[(int)(doutput)]->U.V6.lid);
@@ -5556,7 +6927,7 @@ epredef(ts, tp)
     else
      fatal(etree);
    while (tq != (struct S64 *)NIL) {
-    if ((Member((unsigned)(tq->tt), Conset[137])) && (tx == typeof(tq))) {
+    if ((Member((unsigned)(tq->tt), Conset[161])) && (tx == typeof(tq))) {
      (void)fprintf(output.fp, "%sFwrite(", voidcast), Putl(output, 0);
      eexpr(tq);
     } else {
@@ -5814,7 +7185,7 @@ epredef(ts, tp)
    default:
   Caseerror(Line);
  }
- G195_nelems = F196;
+ G217_nelems = F218;
 }
 
  void
@@ -5822,7 +7193,7 @@ eaddr(tp)
  treeptr tp;
 {
  Putchr('&', output);
- if (!(Member((unsigned)(tp->tt), Conset[138])))
+ if (!(Member((unsigned)(tp->tt), Conset[162])))
   error(evarpar);
  eexpr(tp);
 }
@@ -5860,7 +7231,7 @@ ecall(tp)
  Putchr('(', output);
  tq = tp->U.V30.taparm;
  while (tq != (struct S64 *)NIL) {
-  if (Member((unsigned)(tf->tup->tt), Conset[139])) {
+  if (Member((unsigned)(tf->tup->tt), Conset[163])) {
    if (tq->tt == ncall)
     printid(tq->U.V30.tcall->U.V43.tsym->U.V6.lid);
    else
@@ -5871,7 +7242,7 @@ ecall(tp)
     tx = tq;
     while (tx->tt == nuplus)
      tx = tx->U.V42.texps;
-    if (Member((unsigned)(tx->tt), Conset[140])) {
+    if (Member((unsigned)(tx->tt), Conset[164])) {
      Putchr('(', output);
      printid(defnams.A[(int)(dboolean)]->U.V6.lid);
      (void)fprintf(output.fp, ")("), Putl(output, 0);
@@ -5887,7 +7258,7 @@ ecall(tp)
      (void)fprintf(output.fp, "*(("), Putl(output, 0);
      etypedef(tf->tup->U.V14.tbind);
      (void)fprintf(output.fp, " *)"), Putl(output, 0);
-     (*G202_dropset) = true;
+     (*G224_dropset) = true;
      if (align) {
       usesal = true;
       (void)fprintf(output.fp, "SETALIGN("), Putl(output, 0);
@@ -5895,7 +7266,7 @@ ecall(tp)
       Putchr(')', output);
      } else
       eexpr(tq);
-     (*G202_dropset) = false;
+     (*G224_dropset) = false;
      Putchr(')', output);
     } else
      if (tx == typnods.A[(int)(tstring)]) {
@@ -5965,21 +7336,21 @@ boolean constset();
 constxps(tp)
  treeptr tp;
 {
- register boolean R177;
+ register boolean R199;
 
  switch ((int)(tp->tt)) {
    case nrange:
   if (constxps(tp->U.V41.texpr))
-   R177 = constxps(tp->U.V41.texpl);
+   R199 = constxps(tp->U.V41.texpl);
   else
-   R177 = false;
+   R199 = false;
   break ;
    case nempty:  case ninteger:  case nchar:
-  R177 = true;
+  R199 = true;
   break ;
    case nid:
   tp = idup(tp);
-  R177 = (boolean)((tp->tt == nconst) || (tp->tt == nscalar));
+  R199 = (boolean)((tp->tt == nconst) || (tp->tt == nscalar));
   break ;
    case nin:  case neq:  case nne:  case nlt:
    case nle:  case ngt:  case nge:  case nor:
@@ -5988,29 +7359,29 @@ constxps(tp)
    case numinus:  case nuplus:  case nset:  case nindex:
    case nselect:  case nderef:  case ncall:  case nreal:
    case nstring:  case nnil:
-  R177 = false;
+  R199 = false;
   break ;
    default:
   Caseerror(Line);
  }
- return R177;
+ return R199;
 }
 
  boolean
 constset(tp)
  treeptr tp;
 {
- register boolean R176;
+ register boolean R198;
 
- R176 = true;
+ R198 = true;
  while (tp != (struct S64 *)NIL)
   if (constxps(tp))
    tp = tp->tnext;
   else {
-   R176 = false;
+   R198 = false;
    tp = (struct S64 *)NIL;
   }
- return R176;
+ return R198;
 }
 
  void
@@ -6020,23 +7391,23 @@ eexpr(tp)
  treeptr tq;
  boolean flag;
 
- (*G206_donearr) = false;
- if (Member((unsigned)(tp->tt), Conset[141])) {
+ (*G228_donearr) = false;
+ if (Member((unsigned)(tp->tt), Conset[165])) {
   tq = typeof(tp->U.V41.texpl);
-  if ((Member((unsigned)(tq->tt), Conset[142])) || (tq == typnods.A[(int)(tset)])) {
+  if ((Member((unsigned)(tq->tt), Conset[166])) || (tq == typnods.A[(int)(tset)])) {
    switch ((int)(tp->tt)) {
      case nplus:
-    (*G200_setused) = true;
+    (*G222_setused) = true;
     useunion = true;
     (void)fprintf(output.fp, "Union"), Putl(output, 0);
     break ;
      case nminus:
-    (*G200_setused) = true;
+    (*G222_setused) = true;
     usediff = true;
     (void)fprintf(output.fp, "Diff"), Putl(output, 0);
     break ;
      case nmul:
-    (*G200_setused) = true;
+    (*G222_setused) = true;
     useintr = true;
     (void)fprintf(output.fp, "Inter"), Putl(output, 0);
     break ;
@@ -6059,8 +7430,8 @@ eexpr(tp)
      default:
     Caseerror(Line);
    }
-   if (Member((unsigned)(tp->tt), Conset[143]))
-    (*G202_dropset) = false;
+   if (Member((unsigned)(tp->tt), Conset[167]))
+    (*G224_dropset) = false;
    Putchr('(', output);
    eexpr(tp->U.V41.texpl);
    if (tq->tt == nsetof)
@@ -6074,11 +7445,11 @@ eexpr(tp)
    goto L999;
   }
  }
- if (Member((unsigned)(tp->tt), Conset[144])) {
+ if (Member((unsigned)(tp->tt), Conset[168])) {
   tq = typeof(tp->U.V41.texpl);
   if (tq->tt == nconfarr)
    fatal(ecmpconf);
-  if ((Member((unsigned)(tq->tt), Conset[145])) || (tq == typnods.A[(int)(tstring)])) {
+  if ((Member((unsigned)(tq->tt), Conset[169])) || (tq == typnods.A[(int)(tstring)])) {
    (void)fprintf(output.fp, "Cmpstr("), Putl(output, 0);
    eexpr(tp->U.V41.texpl);
    if (tq->tt == narray)
@@ -6123,7 +7494,7 @@ eexpr(tp)
    case nplus:  case nminus:  case nmul:  case ndiv:
    case nmod:  case nquot:
   flag = (boolean)(cprio.A[(int)(tp->tt) - (int)(nassign)] > cprio.A[(int)(tp->U.V41.texpl->tt) - (int)(nassign)]);
-  if ((Member((unsigned)(tp->tt), Conset[146])) && !arithexpr(tp->U.V41.texpl)) {
+  if ((Member((unsigned)(tp->tt), Conset[170])) && !arithexpr(tp->U.V41.texpl)) {
    (void)fprintf(output.fp, "(int)"), Putl(output, 0);
    flag = true;
   }
@@ -6181,7 +7552,7 @@ eexpr(tp)
    Caseerror(Line);
   }
   flag = (boolean)(cprio.A[(int)(tp->tt) - (int)(nassign)] > cprio.A[(int)(tp->U.V41.texpr->tt) - (int)(nassign)]);
-  if ((Member((unsigned)(tp->tt), Conset[147])) && !arithexpr(tp->U.V41.texpr)) {
+  if ((Member((unsigned)(tp->tt), Conset[171])) && !arithexpr(tp->U.V41.texpr)) {
    (void)fprintf(output.fp, "(int)"), Putl(output, 0);
    flag = true;
   }
@@ -6218,9 +7589,9 @@ eexpr(tp)
   (void)fprintf(output.fp, "Member((unsigned)("), Putl(output, 0);
   eexpr(tp->U.V41.texpl);
   (void)fprintf(output.fp, "), "), Putl(output, 0);
-  (*G202_dropset) = true;
+  (*G224_dropset) = true;
   eexpr(tp->U.V41.texpr);
-  (*G202_dropset) = false;
+  (*G224_dropset) = false;
   tq = typeof(tp->U.V41.texpr);
   if (tq->tt == nsetof)
    (void)fprintf(output.fp, ".S"), Putl(output, 0);
@@ -6243,7 +7614,7 @@ eexpr(tp)
     tq = tp->U.V27.trhs;
     while (tq->tt == nuplus)
      tq = tq->U.V42.texps;
-    if (Member((unsigned)(tq->tt), Conset[148])) {
+    if (Member((unsigned)(tq->tt), Conset[172])) {
      Putchr('(', output);
      printid(defnams.A[(int)(dboolean)]->U.V6.lid);
      (void)fprintf(output.fp, ")("), Putl(output, 0);
@@ -6264,7 +7635,7 @@ eexpr(tp)
       (void)fprintf(output.fp, "Setncpy("), Putl(output, 0);
       eselect(tp->U.V27.tlhs);
       (void)fprintf(output.fp, "S, "), Putl(output, 0);
-      (*G202_dropset) = true;
+      (*G224_dropset) = true;
       tq = typeof(tp->U.V27.trhs);
       if (tq == typnods.A[(int)(tset)])
        eexpr(tp->U.V27.trhs);
@@ -6272,7 +7643,7 @@ eexpr(tp)
        eselect(tp->U.V27.trhs);
        Putchr('S', output);
       }
-      (*G202_dropset) = false;
+      (*G224_dropset) = false;
       (void)fprintf(output.fp, ", sizeof("), Putl(output, 0);
       eselect(tp->U.V27.tlhs);
       (void)fprintf(output.fp, "S))"), Putl(output, 0);
@@ -6285,7 +7656,7 @@ eexpr(tp)
   break ;
    case ncall:
   tq = idup(tp->U.V30.tcall);
-  if ((Member((unsigned)(tq->tt), Conset[149])) && (tq->U.V13.tsubstmt != (struct S64 *)NIL))
+  if ((Member((unsigned)(tq->tt), Conset[173])) && (tq->U.V13.tsubstmt != (struct S64 *)NIL))
    if (tq->U.V13.tsubstmt->tt == npredef)
     epredef(tq, tp);
    else
@@ -6332,11 +7703,11 @@ eexpr(tp)
    eexpr(tp->U.V42.texps);
    (void)fprintf(output.fp, ".buf"), Putl(output, 0);
   } else
-   if ((*G204_doarrow)) {
-    (*G204_doarrow) = false;
+   if ((*G226_doarrow)) {
+    (*G226_doarrow) = false;
     eexpr(tp->U.V42.texps);
     (void)fprintf(output.fp, "->"), Putl(output, 0);
-    (*G206_donearr) = true;
+    (*G228_donearr) = true;
    } else {
     (void)fprintf(output.fp, "(*"), Putl(output, 0);
     eexpr(tp->U.V42.texps);
@@ -6346,21 +7717,21 @@ eexpr(tp)
    case nid:
   tq = idup(tp);
   if (tq->tt == nvarpar)
-   if ((*G204_doarrow)) {
-    (*G204_doarrow) = false;
+   if ((*G226_doarrow)) {
+    (*G226_doarrow) = false;
     printid(tp->U.V43.tsym->U.V6.lid);
     (void)fprintf(output.fp, "->"), Putl(output, 0);
-    (*G206_donearr) = true;
+    (*G228_donearr) = true;
    } else {
     (void)fprintf(output.fp, "(*"), Putl(output, 0);
     printid(tp->U.V43.tsym->U.V6.lid);
     Putchr(')', output);
    }
   else
-   if ((tq->tt == nconst) && (*G198_conflag))
+   if ((tq->tt == nconst) && (*G220_conflag))
     (void)fprintf(output.fp, "%1d", cvalof(tp)), Putl(output, 0);
    else
-    if (Member((unsigned)(tq->tt), Conset[150])) {
+    if (Member((unsigned)(tq->tt), Conset[174])) {
      (void)fprintf(output.fp, "(*"), Putl(output, 0);
      printid(tp->U.V43.tsym->U.V6.lid);
      Putchr(')', output);
@@ -6389,9 +7760,9 @@ eexpr(tp)
    tq->U.V42.texps = tp->U.V42.texps;
   } else {
    increment();
-   flag = (*G202_dropset);
-   if ((*G202_dropset))
-    (*G202_dropset) = false;
+   flag = (*G224_dropset);
+   if ((*G224_dropset))
+    (*G224_dropset) = false;
    else
     (void)fprintf(output.fp, "Saveset("), Putl(output, 0);
    (void)fprintf(output.fp, "(Tmpset = Newset(), "), Putl(output, 0);
@@ -6433,7 +7804,7 @@ eexpr(tp)
    (void)fprintf(output.fp, ", Tmpset)"), Putl(output, 0);
    if (!flag) {
     Putchr(')', output);
-    (*G200_setused) = true;
+    (*G222_setused) = true;
    }
    decrement();
   }
@@ -6442,8 +7813,8 @@ eexpr(tp)
   tq = tp;
   do {
    tq = tq->tup;
-  } while (!(Member((unsigned)(tq->tt), Conset[151])));
-  if (Member((unsigned)(tq->tt), Conset[152])) {
+  } while (!(Member((unsigned)(tq->tt), Conset[175])));
+  if (Member((unsigned)(tq->tt), Conset[176])) {
    if (typeof(tq->U.V41.texpl) == typnods.A[(int)(tnil)])
     tq = typeof(tq->U.V41.texpr);
    else
@@ -6528,7 +7899,7 @@ etrange(tp)
   if (B51 <= B52)
    for (i = B51; ; i++) {
     {
-     register struct S197 *W53 = &machdefs.A[i - 1];
+     register struct S219 *W53 = &machdefs.A[i - 1];
 
      if ((lo >= W53->lolim) && (hi <= W53->hilim)) {
       printtok(W53->typstr);
@@ -6906,9 +8277,9 @@ echoise(tp)
   indent();
   while (tq != (struct S64 *)NIL) {
    (void)fprintf(output.fp, "  case "), Putl(output, 0);
-   (*G198_conflag) = true;
+   (*G220_conflag) = true;
    eexpr(tq);
-   (*G198_conflag) = false;
+   (*G220_conflag) = false;
    Putchr(':', output);
    i = i + 1;
    tq = tq->tnext;
@@ -7000,7 +8371,7 @@ estmt(tp)
  while (tp != (struct S64 *)NIL) {
   switch ((int)(tp->tt)) {
     case nbegin:
-   if (Member((unsigned)(tp->tup->tt), Conset[153]))
+   if (Member((unsigned)(tp->tup->tt), Conset[177]))
     indent();
    Putchr('{', output),Putchr('\n', output);
    increment();
@@ -7027,7 +8398,7 @@ estmt(tp)
    (void)fprintf(output.fp, "while ("), Putl(output, 0);
    increment();
    eexpr(tp->U.V32.twhixp);
-   stusd = (*G200_setused);
+   stusd = (*G222_setused);
    if (tp->U.V32.twhistmt->tt == nbegin) {
     decrement();
     (void)fprintf(output.fp, ") "), Putl(output, 0);
@@ -7037,7 +8408,7 @@ estmt(tp)
     estmt(tp->U.V32.twhistmt);
     decrement();
    }
-   (*G200_setused) = (boolean)(stusd || (*G200_setused));
+   (*G222_setused) = (boolean)(stusd || (*G222_setused));
    break ;
     case nfor:
    indent();
@@ -7161,8 +8532,8 @@ estmt(tp)
    (void)fprintf(output.fp, "if ("), Putl(output, 0);
    increment();
    eexpr(tp->U.V31.tifxp);
-   stusd = (*G200_setused);
-   (*G200_setused) = false;
+   stusd = (*G222_setused);
+   (*G222_setused) = false;
    if (tp->U.V31.tthen->tt == nbegin) {
     decrement();
     (void)fprintf(output.fp, ") "), Putl(output, 0);
@@ -7191,7 +8562,7 @@ estmt(tp)
      decrement();
     }
    }
-   (*G200_setused) = (boolean)(stusd || (*G200_setused));
+   (*G222_setused) = (boolean)(stusd || (*G222_setused));
    break ;
     case ncase:
    indent();
@@ -7264,7 +8635,7 @@ estmt(tp)
     case ncall:
    indent();
    tq = idup(tp->U.V30.tcall);
-   if ((Member((unsigned)(tq->tt), Conset[154])) && (tq->U.V13.tsubstmt != (struct S64 *)NIL))
+   if ((Member((unsigned)(tq->tt), Conset[178])) && (tq->U.V13.tsubstmt != (struct S64 *)NIL))
     if (tq->U.V13.tsubstmt->tt == npredef)
      epredef(tq, tp);
     else {
@@ -7287,7 +8658,7 @@ estmt(tp)
    (void)fprintf(output.fp, " = "), Putl(output, 0);
    if (tp->U.V28.tloc->tt == nid) {
     tq = idup(tp->U.V28.tloc);
-    if (Member((unsigned)(tq->tt), Conset[155]))
+    if (Member((unsigned)(tq->tt), Conset[179]))
      printid(tp->U.V28.tloc->U.V43.tsym->U.V6.lid);
     else
      eaddr(tp->U.V28.tloc);
@@ -7311,7 +8682,7 @@ estmt(tp)
    (void)fprintf(output.fp, ") break;\n"), Putl(output, 1);
    break ;
     case nempty:
-   if (!(Member((unsigned)(tp->tup->tt), Conset[156]))) {
+   if (!(Member((unsigned)(tp->tup->tt), Conset[180]))) {
     indent();
     Putchr(';', output),Putchr('\n', output);
    }
@@ -7319,10 +8690,10 @@ estmt(tp)
     default:
    Caseerror(Line);
   }
-  if ((*G200_setused) && (Member((unsigned)(tp->tup->tt), Conset[157]))) {
+  if ((*G222_setused) && (Member((unsigned)(tp->tup->tt), Conset[181]))) {
    indent();
    (void)fprintf(output.fp, "Claimset();\n"), Putl(output, 1);
-   (*G200_setused) = false;
+   (*G222_setused) = false;
   }
   tp = tp->tnext;
  }
@@ -7486,10 +8857,10 @@ esubr(tp)
 use(d)
  predefs d;
 {
- register boolean R178;
+ register boolean R200;
 
- R178 = defnams.A[(int)(d)]->U.V6.lused;
- return R178;
+ R200 = defnams.A[(int)(d)]->U.V6.lused;
+ return R200;
 }
 
 void eprogram();
@@ -7816,7 +9187,7 @@ void econset();
 size(tp)
  treeptr tp;
 {
- register integer R179;
+ register integer R201;
  integer r, x;
 
  r = 0;
@@ -7832,8 +9203,8 @@ size(tp)
    r = x;
   tp = tp->tnext;
  }
- R179 = csetwords(r + 1);
- return R179;
+ R201 = csetwords(r + 1);
+ return R201;
 }
 
 void ebits();
@@ -7902,7 +9273,7 @@ ebits(tp)
 
   if (B59 <= B60)
    for (n = B59; ; n++) {
-    Setncpy(sets.A[n].S, Conset[158], sizeof(sets.A[n].S));
+    Setncpy(sets.A[n].S, Conset[182], sizeof(sets.A[n].S));
     if (n == B60) break;
    }
  }
@@ -7985,32 +9356,32 @@ emit()
  static char usigned[]       = "unsigned ";
  boolean conflag, setused, dropset, doarrow, donearr;
  integer indnt;
- boolean *F199;
- boolean *F201;
- boolean *F203;
- boolean *F205;
- boolean *F207;
- integer *F209;
+ boolean *F221;
+ boolean *F223;
+ boolean *F225;
+ boolean *F227;
+ boolean *F229;
+ integer *F231;
 
- F209 = G208_indnt;
- G208_indnt = &indnt;
- F207 = G206_donearr;
- G206_donearr = &donearr;
- F205 = G204_doarrow;
- G204_doarrow = &doarrow;
- F203 = G202_dropset;
- G202_dropset = &dropset;
- F201 = G200_setused;
- G200_setused = &setused;
- F199 = G198_conflag;
- G198_conflag = &conflag;
- (*G208_indnt) = 0;
+ F231 = G230_indnt;
+ G230_indnt = &indnt;
+ F229 = G228_donearr;
+ G228_donearr = &donearr;
+ F227 = G226_doarrow;
+ G226_doarrow = &doarrow;
+ F225 = G224_dropset;
+ G224_dropset = &dropset;
+ F223 = G222_setused;
+ G222_setused = &setused;
+ F221 = G220_conflag;
+ G220_conflag = &conflag;
+ (*G230_indnt) = 0;
  varno = 0;
- (*G198_conflag) = false;
- (*G200_setused) = false;
- (*G202_dropset) = false;
- (*G204_doarrow) = false;
- (*G206_donearr) = false;
+ (*G220_conflag) = false;
+ (*G222_setused) = false;
+ (*G224_dropset) = false;
+ (*G226_doarrow) = false;
+ (*G228_donearr) = false;
  eprogram(top);
  if (usebool)
   (void)fprintf(output.fp, "%s%s%c*Bools[] = { \"false\", \"true\" };\n", C50_static, chartyp, tab1), Putl(output, 1);
@@ -8441,12 +9812,12 @@ emit()
   (void)fprintf(output.fp, "%creturn floor(%s(0.5+f));\n", tab1, dblcast), Putl(output, 1);
   Putchr('}', output),Putchr('\n', output);
  }
- G198_conflag = F199;
- G200_setused = F201;
- G202_dropset = F203;
- G204_doarrow = F205;
- G206_donearr = F207;
- G208_indnt = F209;
+ G220_conflag = F221;
+ G222_setused = F223;
+ G224_dropset = F225;
+ G226_doarrow = F227;
+ G228_donearr = F229;
+ G230_indnt = F231;
 }
 
 void initialize();
@@ -8509,7 +9880,7 @@ defid(nt, did, str)
 L999:
  tp = newid(saveid(&w));
  defnams.A[(int)(did)] = tp->U.V43.tsym;
- if (Member((unsigned)(nt), Conset[159])) {
+ if (Member((unsigned)(nt), Conset[183])) {
   tv = mknode(npredef);
   tv->U.V12.tdef = did;
   tv->U.V12.tobtyp = tnone;
@@ -8573,7 +9944,7 @@ defkey(s, w)
    }
  }
  {
-  register struct S210 *W73 = &keytab.A[(unsigned)(s)];
+  register struct S232 *W73 = &keytab.A[(unsigned)(s)];
 
   W73->wrd = w;
   W73->sym = s;
@@ -8624,7 +9995,7 @@ L999:
   error(emanymachs);
  nmachdefs = nmachdefs + 1;
  {
-  register struct S197 *W76 = &machdefs.A[nmachdefs - 1];
+  register struct S219 *W76 = &machdefs.A[nmachdefs - 1];
 
   W76->lolim = lo;
   W76->hilim = hi;
@@ -8977,7 +10348,7 @@ initialize()
       default:
      Caseerror(Line);
     }
-    if (Member((unsigned)(t), Conset[160]))
+    if (Member((unsigned)(t), Conset[184]))
      typnods.A[(int)(t)]->U.V12.tobtyp = t;
     if (t == B84) break;
    }
@@ -9071,6 +10442,7 @@ main()
  if (echo)
   (void)fprintf(output.fp, "# ifdef PASCAL\n"), Putl(output, 1);
  parse();
+ semcheck();
  if (echo)
   (void)fprintf(output.fp, "# else\n"), Putl(output, 1);
  lineno = 0;
@@ -9257,518 +10629,618 @@ static setword Q32[] = {
  0x000E
 };
 static setword Q33[] = {
- 3,
- 0x4010, 0x0C00, 0x000A
+ 2,
+ 0x8000, 0x000F
 };
 static setword Q34[] = {
- 5,
- 0x0300, 0x0000, 0x0004, 0x2000, 0x0001
+ 3,
+ 0x0000, 0x0000, 0x0560
 };
 static setword Q35[] = {
- 4,
- 0x0300, 0x0000, 0x0004, 0x2000
+ 3,
+ 0x0000, 0x0000, 0x0060
 };
 static setword Q36[] = {
- 3,
- 0x0000, 0x0000, 0x0080
+ 2,
+ 0x43A0, 0x0040
 };
 static setword Q37[] = {
- 4,
- 0x0040, 0x0000, 0x0000, 0x0800
+ 1,
+ 0x0300
 };
 static setword Q38[] = {
  1,
- 0x0040
+ 0x000C
 };
 static setword Q39[] = {
- 3,
- 0x0080, 0x0000, 0x0001
+ 1,
+ 0x000C
 };
 static setword Q40[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x4000
+ 1,
+ 0x0804
 };
 static setword Q41[] = {
- 3,
- 0x0000, 0x0000, 0x0800
+ 1,
+ 0x0408
 };
 static setword Q42[] = {
- 4,
- 0x0000, 0x0000, 0x0004, 0x2000
-};
-static setword Q43[] = {
- 1,
- 0x0040
-};
-static setword Q44[] = {
- 2,
- 0x0000, 0x8000
-};
-static setword Q45[] = {
- 4,
- 0x0300, 0x0000, 0x0004, 0x2000
-};
-static setword Q46[] = {
- 4,
- 0x930C, 0x2001, 0x0834, 0x2000
-};
-static setword Q47[] = {
- 4,
- 0x930C, 0x2001, 0x0834, 0x3000
-};
-static setword Q48[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1800
-};
-static setword Q49[] = {
- 2,
- 0x0200, 0x0100
-};
-static setword Q50[] = {
- 3,
- 0x0200, 0x0100, 0x3C80
-};
-static setword Q51[] = {
- 2,
- 0x0000, 0x0040
-};
-static setword Q52[] = {
- 4,
- 0x0000, 0x0000, 0x4FF0, 0x0008
-};
-static setword Q53[] = {
- 4,
- 0x03E1, 0x80CA, 0xF005, 0xBFFE
-};
-static setword Q54[] = {
- 4,
- 0x0000, 0x0030, 0x3F80, 0x001A
-};
-static setword Q55[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0478
-};
-static setword Q56[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0478
-};
-static setword Q57[] = {
  1,
  0x0C0C
 };
-static setword Q58[] = {
+static setword Q43[] = {
+ 2,
+ 0x0000, 0x0003
+};
+static setword Q44[] = {
+ 2,
+ 0x0000, 0x0003
+};
+static setword Q45[] = {
+ 2,
+ 0x0000, 0x0003
+};
+static setword Q46[] = {
+ 2,
+ 0x0000, 0x0003
+};
+static setword Q47[] = {
+ 1,
+ 0x0300
+};
+static setword Q48[] = {
+ 1,
+ 0x000C
+};
+static setword Q49[] = {
+ 1,
+ 0x0804
+};
+static setword Q50[] = {
+ 1,
+ 0x0408
+};
+static setword Q51[] = {
+ 1,
+ 0x0300
+};
+static setword Q52[] = {
+ 1,
+ 0x0300
+};
+static setword Q53[] = {
+ 1,
+ 0x0300
+};
+static setword Q54[] = {
+ 1,
+ 0x4380
+};
+static setword Q55[] = {
+ 2,
+ 0x0020, 0x0040
+};
+static setword Q56[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x4010, 0x0C00, 0x000A
+};
+static setword Q57[] = {
+ 5,
+ 0x0300, 0x0000, 0x0004, 0x2000, 0x0001
+};
+static setword Q58[] = {
+ 4,
+ 0x0300, 0x0000, 0x0004, 0x2000
 };
 static setword Q59[] = {
- 5,
- 0x0000, 0x0000, 0x0000, 0x000B, 0x0001
+ 3,
+ 0x0000, 0x0000, 0x0080
 };
 static setword Q60[] = {
- 5,
- 0x03E1, 0x80CA, 0xF005, 0xFFFF, 0x0001
+ 4,
+ 0x0040, 0x0000, 0x0000, 0x0800
 };
 static setword Q61[] = {
- 4,
- 0x930C, 0x2001, 0x0834, 0x2000
+ 1,
+ 0x0040
 };
 static setword Q62[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1000
+ 3,
+ 0x0080, 0x0000, 0x0001
 };
 static setword Q63[] = {
  4,
- 0x930C, 0x2001, 0x08B4, 0x2000
+ 0x0000, 0x0000, 0x0000, 0x4000
 };
 static setword Q64[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x2004
-};
-static setword Q65[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
-static setword Q66[] = {
+static setword Q65[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x1000
+ 0x0000, 0x0000, 0x0004, 0x2000
+};
+static setword Q66[] = {
+ 1,
+ 0x0040
 };
 static setword Q67[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1002
+ 2,
+ 0x0000, 0x8000
 };
 static setword Q68[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2004
+ 0x0300, 0x0000, 0x0004, 0x2000
 };
 static setword Q69[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2006
+ 0x930C, 0x2001, 0x0834, 0x2000
 };
 static setword Q70[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2004
+ 0x930C, 0x2001, 0x0834, 0x3000
 };
 static setword Q71[] = {
- 3,
- 0x0002, 0x0000, 0x0800
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1800
 };
 static setword Q72[] = {
- 3,
- 0x0000, 0x0000, 0x0800
+ 2,
+ 0x0200, 0x0100
 };
 static setword Q73[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1000
+ 3,
+ 0x0200, 0x0100, 0x3C80
 };
 static setword Q74[] = {
- 3,
- 0x0000, 0x0000, 0x0800
-};
-static setword Q75[] = {
- 3,
- 0x4000, 0x0400, 0x0808
-};
-static setword Q76[] = {
- 3,
- 0x0002, 0x0000, 0x0800
-};
-static setword Q77[] = {
  2,
  0x0000, 0x0040
 };
+static setword Q75[] = {
+ 4,
+ 0x0000, 0x0000, 0x4FF0, 0x0008
+};
+static setword Q76[] = {
+ 4,
+ 0x03E1, 0x80CA, 0xF005, 0xBFFE
+};
+static setword Q77[] = {
+ 4,
+ 0x0000, 0x0030, 0x3F80, 0x001A
+};
 static setword Q78[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2010
+ 0x0000, 0x0000, 0x0000, 0x0478
 };
 static setword Q79[] = {
- 3,
- 0x0000, 0x0000, 0x0800
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0478
 };
 static setword Q80[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x2010
+ 1,
+ 0x0C0C
 };
 static setword Q81[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
 static setword Q82[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0008
+ 5,
+ 0x0000, 0x0000, 0x0000, 0x000B, 0x0001
 };
 static setword Q83[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1000
+ 5,
+ 0x03E1, 0x80CA, 0xF005, 0xFFFF, 0x0001
 };
 static setword Q84[] = {
- 3,
- 0x0000, 0x0000, 0x0800
+ 4,
+ 0x930C, 0x2001, 0x0834, 0x2000
 };
 static setword Q85[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x8000
+ 0x0000, 0x0000, 0x0000, 0x1000
 };
 static setword Q86[] = {
+ 4,
+ 0x930C, 0x2001, 0x08B4, 0x2000
+};
+static setword Q87[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2004
+};
+static setword Q88[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
-static setword Q87[] = {
- 3,
- 0x4004, 0x0400, 0x0040
-};
-static setword Q88[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x2000
-};
 static setword Q89[] = {
- 1,
- 0x2400
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1000
 };
 static setword Q90[] = {
- 3,
- 0x4014, 0x0404, 0x000A
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1002
 };
 static setword Q91[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2000
+ 0x0000, 0x0000, 0x0000, 0x2004
 };
 static setword Q92[] = {
- 3,
- 0x6414, 0x0404, 0x000A
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2006
 };
 static setword Q93[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2000
+ 0x0000, 0x0000, 0x0000, 0x2004
 };
 static setword Q94[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x0002, 0x0000, 0x0800
 };
 static setword Q95[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
 static setword Q96[] = {
- 3,
- 0x4004, 0x0400, 0x0840
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1000
 };
 static setword Q97[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1800
+ 3,
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q98[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x4000, 0x0400, 0x0808
 };
 static setword Q99[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1800
+ 3,
+ 0x0002, 0x0000, 0x0800
 };
 static setword Q100[] = {
- 3,
- 0x0000, 0x0000, 0x0800
+ 2,
+ 0x0000, 0x0040
 };
 static setword Q101[] = {
- 3,
- 0x4004, 0x0400, 0x0848
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2010
 };
 static setword Q102[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0020
-};
-static setword Q103[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
+static setword Q103[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2010
+};
 static setword Q104[] = {
- 2,
- 0x0000, 0x0040
+ 3,
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q105[] = {
- 2,
- 0x0000, 0x0040
-};
-static setword Q106[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0010
-};
-static setword Q107[] = {
  4,
  0x0000, 0x0000, 0x0000, 0x0008
 };
+static setword Q106[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1000
+};
+static setword Q107[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
 static setword Q108[] = {
  4,
- 0x0200, 0x0000, 0x0000, 0x2004
+ 0x0000, 0x0000, 0x0000, 0x8000
 };
 static setword Q109[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
 static setword Q110[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0004
+ 3,
+ 0x4004, 0x0400, 0x0040
 };
 static setword Q111[] = {
- 3,
- 0x0000, 0x0000, 0x0800
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2000
 };
 static setword Q112[] = {
- 3,
- 0x0000, 0x0000, 0x3C80
+ 1,
+ 0x2400
 };
 static setword Q113[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x8000
+ 3,
+ 0x4014, 0x0404, 0x000A
 };
 static setword Q114[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x8000
+ 0x0000, 0x0000, 0x0000, 0x2000
 };
 static setword Q115[] = {
- 4,
- 0x0200, 0x0000, 0x0000, 0x2814
+ 3,
+ 0x6414, 0x0404, 0x000A
 };
 static setword Q116[] = {
- 2,
- 0x0802, 0x5000
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2000
 };
 static setword Q117[] = {
- 4,
- 0x0802, 0x5200, 0x3C80, 0x0003
+ 3,
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q118[] = {
- 4,
- 0x0200, 0x0000, 0x0000, 0x2004
+ 3,
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q119[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0002
+ 3,
+ 0x4004, 0x0400, 0x0840
 };
 static setword Q120[] = {
  4,
  0x0000, 0x0000, 0x0000, 0x1800
 };
 static setword Q121[] = {
- 2,
- 0x0000, 0x0040
-};
-static setword Q122[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
-static setword Q123[] = {
+static setword Q122[] = {
  4,
- 0x0000, 0x0040, 0x0000, 0x1000
+ 0x0000, 0x0000, 0x0000, 0x1800
+};
+static setword Q123[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q124[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x4004, 0x0400, 0x0848
 };
 static setword Q125[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x1000
+ 0x0000, 0x0000, 0x0000, 0x0020
 };
 static setword Q126[] = {
  3,
- 0x0000, 0x0000, 0x0880
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q127[] = {
- 3,
- 0x0000, 0x0000, 0x0980
+ 2,
+ 0x0000, 0x0040
 };
 static setword Q128[] = {
- 3,
- 0x0000, 0x0000, 0x3000
+ 2,
+ 0x0000, 0x0040
 };
 static setword Q129[] = {
- 3,
- 0x4004, 0x0400, 0x084A
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0010
 };
 static setword Q130[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2000
+ 0x0000, 0x0000, 0x0000, 0x0008
 };
 static setword Q131[] = {
- 3,
- 0x0000, 0x0000, 0x3F80
+ 4,
+ 0x0200, 0x0000, 0x0000, 0x2004
 };
 static setword Q132[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0020
-};
-static setword Q133[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
-static setword Q134[] = {
+static setword Q133[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x1824
+ 0x0000, 0x0000, 0x0000, 0x0004
+};
+static setword Q134[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q135[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x0000, 0x0000, 0x3C80
 };
 static setword Q136[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x1824
+ 0x0000, 0x0000, 0x0000, 0x8000
 };
 static setword Q137[] = {
- 3,
- 0x4014, 0x0400, 0x000A
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x8000
 };
 static setword Q138[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2800
+ 0x0200, 0x0000, 0x0000, 0x2814
 };
 static setword Q139[] = {
- 3,
- 0x0000, 0x0000, 0x0080
+ 2,
+ 0x0802, 0x5000
 };
 static setword Q140[] = {
- 3,
- 0x0000, 0x0000, 0x0040
+ 4,
+ 0x0802, 0x5200, 0x3C80, 0x0003
 };
 static setword Q141[] = {
  4,
- 0x0000, 0x0000, 0x0040, 0x2000
+ 0x0200, 0x0000, 0x0000, 0x2004
 };
 static setword Q142[] = {
- 3,
- 0x0000, 0x0000, 0x0040
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0002
 };
 static setword Q143[] = {
- 5,
- 0x0000, 0x0000, 0x0000, 0x0000, 0x0001
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1800
 };
 static setword Q144[] = {
- 3,
- 0x4014, 0x0404, 0x000A
+ 2,
+ 0x0000, 0x0040
 };
 static setword Q145[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x2000
+ 3,
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q146[] = {
- 3,
- 0x0000, 0x0000, 0x0800
+ 4,
+ 0x0000, 0x0040, 0x0000, 0x1000
 };
 static setword Q147[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x2002
-};
-static setword Q148[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
-static setword Q149[] = {
+static setword Q148[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x0804
+ 0x0000, 0x0000, 0x0000, 0x1000
+};
+static setword Q149[] = {
+ 3,
+ 0x0000, 0x0000, 0x0880
 };
 static setword Q150[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x0000, 0x0000, 0x0980
 };
 static setword Q151[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0804
+ 3,
+ 0x0000, 0x0000, 0x3000
 };
 static setword Q152[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x4004, 0x0400, 0x084A
 };
 static setword Q153[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x0804
+ 0x0000, 0x0000, 0x0000, 0x2000
 };
 static setword Q154[] = {
  3,
- 0x0004, 0x0000, 0x0040
+ 0x0000, 0x0000, 0x3F80
 };
 static setword Q155[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0020
+};
+static setword Q156[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q157[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1824
+};
+static setword Q158[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q159[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1824
+};
+static setword Q160[] = {
+ 3,
+ 0x4014, 0x0400, 0x000A
+};
+static setword Q161[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2800
+};
+static setword Q162[] = {
+ 3,
+ 0x0000, 0x0000, 0x0080
+};
+static setword Q163[] = {
+ 3,
+ 0x0000, 0x0000, 0x0040
+};
+static setword Q164[] = {
+ 4,
+ 0x0000, 0x0000, 0x0040, 0x2000
+};
+static setword Q165[] = {
+ 3,
+ 0x0000, 0x0000, 0x0040
+};
+static setword Q166[] = {
+ 5,
+ 0x0000, 0x0000, 0x0000, 0x0000, 0x0001
+};
+static setword Q167[] = {
+ 3,
+ 0x4014, 0x0404, 0x000A
+};
+static setword Q168[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2000
+};
+static setword Q169[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q170[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2002
+};
+static setword Q171[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q172[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0804
+};
+static setword Q173[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q174[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0804
+};
+static setword Q175[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q176[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0804
+};
+static setword Q177[] = {
+ 3,
+ 0x0004, 0x0000, 0x0040
+};
+static setword Q178[] = {
  1,
  0x0018
 };
-static setword Q156[] = {
+static setword Q179[] = {
  1,
  0x00C0
 };
-static setword Q157[] = {
+static setword Q180[] = {
  1,
  0x001A
 };
-static setword Q158[] = {
+static setword Q181[] = {
  1,
  0x001E
 };
-static setword Q159[] = {
+static setword Q182[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0478
+};
+static setword Q183[] = {
  1,
  0x001F
 };
-static setword Q160[] = {
+static setword Q184[] = {
  1,
  0x1FE7
 };
 static setword *Conset[] = {
+ Q184, Q183, Q182, Q181, Q180, Q179,
+ Q178, Q177, Q176, Q175, Q174, Q173,
+ Q172, Q171, Q170, Q169, Q168, Q167,
+ Q166, Q165, Q164, Q163, Q162, Q161,
  Q160, Q159, Q158, Q157, Q156, Q155,
  Q154, Q153, Q152, Q151, Q150, Q149,
  Q148, Q147, Q146, Q145, Q144, Q143,

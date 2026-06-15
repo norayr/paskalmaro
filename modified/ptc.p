@@ -9765,7 +9765,7 @@ var     conflag,
                                 'Scanck(fscanf(Tmpfil, p, a))'); (* LIB *)
                         writeln(voidtyp, tab1, 'Scanck();');
                         if use(dreadln) then
-                                writeln(voidtyp, tab1, 'Getl();');
+                                writeln(static, voidtyp, tab1, 'Getl();');
                     end;
                 if use(deoln) then
                         writeln(define, 'Eoln(f) ((f).eoln ? true : false)');
@@ -9843,7 +9843,7 @@ var     conflag,
                     end;
                 if usefopn then
                     begin
-                        writeln('FILE   *Fopen();');
+                        writeln(static, 'FILE', tab1, '*Fopen();');
                         writeln(ifndef, maxfilename);
                         writeln(define, maxfilename, ' ', (maxtoknlen+1):1);
                         writeln(endif)
@@ -9951,8 +9951,15 @@ var     conflag,
                     end;
                 if usenilp then
                         writeln(define, 'NIL 0');               (* CPU *)
-                if (tp^.tsubid = nil) and (use(dnew) or use(ddispose) or use(dhalt) or use(dexit)) then
+                if (tp^.tsubid = nil) and
+                   (use(dnew) or use(ddispose) or use(dhalt) or use(dexit) or
+                    use(dreset) or use(drewrite)) then
                         writeln(include, '<stdlib.h>');  (* LIB *)
+                if use(dreset) or use(drewrite) then
+                    begin
+                        writeln(include, '<string.h>');  (* LIB *)
+                        writeln(include, '<unistd.h>')   (* OS *)
+                    end;
                 if usesets then
                     begin
                         writeln('/', '*');
@@ -10241,8 +10248,6 @@ begin   (* emit *)
                 writeln(tab1, static, chartyp, tab1, 'ch = ',
                                                 quote, 'A', quote, ';');
                 writeln(tab1, static, chartyp, tab1, 'tmp[', maxfilename, '];');
-                writeln(tab1, xtern , inttyp, tab1, 'unlink(),'); (* OS *)
-                writeln(tab3, 'strlen();'); (* OS *)
                 writeln;
                 writeln(tab1, 'if (n == NULL)');
                 writeln(tab2, 'sprintf(tmp, ', tmpfilename, 'ch++);');

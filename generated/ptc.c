@@ -8943,7 +8943,7 @@ eprogram(tp)
   (void)fprintf(output.fp, "%sScan(p, a) Scanck(fscanf(Tmpfil, p, a))\n", C4_define), Putl(output, 1);
   (void)fprintf(output.fp, "%s%cScanck();\n", voidtyp, tab1), Putl(output, 1);
   if (use(dreadln))
-   (void)fprintf(output.fp, "%s%cGetl();\n", voidtyp, tab1), Putl(output, 1);
+   (void)fprintf(output.fp, "%s%s%cGetl();\n", C50_static, voidtyp, tab1), Putl(output, 1);
  }
  if (use(deoln))
   (void)fprintf(output.fp, "%sEoln(f) ((f).eoln ? true : false)\n", C4_define), Putl(output, 1);
@@ -8985,7 +8985,7 @@ eprogram(tp)
   usefopn = true;
  }
  if (usefopn) {
-  (void)fprintf(output.fp, "FILE   *Fopen();\n"), Putl(output, 1);
+  (void)fprintf(output.fp, "%sFILE%c*Fopen();\n", C50_static, tab1), Putl(output, 1);
   (void)fprintf(output.fp, "%s%s\n", ifndef, maxfilename), Putl(output, 1);
   (void)fprintf(output.fp, "%s%s %1d\n", C4_define, maxfilename, (maxtoknlen + 1)), Putl(output, 1);
   (void)fprintf(output.fp, "%s\n", endif), Putl(output, 1);
@@ -9074,8 +9074,12 @@ eprogram(tp)
  }
  if (usenilp)
   (void)fprintf(output.fp, "%sNIL 0\n", C4_define), Putl(output, 1);
- if ((tp->U.V13.tsubid == (struct S64 *)NIL) && (use(dnew) || use(ddispose) || use(dhalt) || use(dexit)))
+ if ((tp->U.V13.tsubid == (struct S64 *)NIL) && (use(dnew) || use(ddispose) || use(dhalt) || use(dexit) || use(dreset) || use(drewrite)))
   (void)fprintf(output.fp, "%s<stdlib.h>\n", C24_include), Putl(output, 1);
+ if (use(dreset) || use(drewrite)) {
+  (void)fprintf(output.fp, "%s<string.h>\n", C24_include), Putl(output, 1);
+  (void)fprintf(output.fp, "%s<unistd.h>\n", C24_include), Putl(output, 1);
+ }
  if (usesets) {
   (void)fprintf(output.fp, "/*\n"), Putl(output, 1);
   (void)fprintf(output.fp, "**     Definitions for set-operations\n"), Putl(output, 1);
@@ -9419,8 +9423,6 @@ emit()
   (void)fprintf(output.fp, "%c%s%s%c*s;\n", tab1, registr, chartyp, tab1), Putl(output, 1);
   (void)fprintf(output.fp, "%c%s%s%cch = %cA%c;\n", tab1, C50_static, chartyp, tab1, quote, quote), Putl(output, 1);
   (void)fprintf(output.fp, "%c%s%s%ctmp[%s];\n", tab1, C50_static, chartyp, tab1, maxfilename), Putl(output, 1);
-  (void)fprintf(output.fp, "%c%s%s%cunlink(),\n", tab1, xtern, inttyp, tab1), Putl(output, 1);
-  (void)fprintf(output.fp, "%sstrlen();\n", tab3), Putl(output, 1);
   Putchr('\n', output);
   (void)fprintf(output.fp, "%cif (n == NULL)\n", tab1), Putl(output, 1);
   (void)fprintf(output.fp, "%ssprintf(tmp, %sch++);\n", tab2, tmpfilename), Putl(output, 1);

@@ -10401,10 +10401,10 @@ initialize()
  deftab.A[(int)(dunpack)]->U.V13.tfuntyp = typnods.A[(int)(tnone)];
  nmachdefs = 0;
  defmach(0, 255, *((machdefstr *)STRALIGN("unsigned char   ")));
- defmach(-128, 127, *((machdefstr *)STRALIGN("char            ")));
+ defmach(-128, 127, *((machdefstr *)STRALIGN("signed char     ")));
  defmach(0, 65535, *((machdefstr *)STRALIGN("unsigned short  ")));
  defmach(-32768, 32767, *((machdefstr *)STRALIGN("short           ")));
- defmach(-2147483647, 2147483647, *((machdefstr *)STRALIGN("long            ")));
+ defmach(-2147483647, 2147483647, *((machdefstr *)STRALIGN("int             ")));
 }
 
 extern void exit();

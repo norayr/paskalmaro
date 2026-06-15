@@ -11214,10 +11214,10 @@ begin   (* initialize *)
         (* set up definitions for integer subranges *)
         nmachdefs := 0;
         defmach(0,              255,            'unsigned char   '); (* CPU *)
-        defmach(-128,           127,            'char            '); (* CPU *)
+        defmach(-128,           127,            'signed char     '); (* CPU *)
         defmach(0,              65535,          'unsigned short  '); (* CPU *)
         defmach(-32768,         32767,          'short           '); (* CPU *)
-        defmach(-2147483647,    2147483647,     'long            '); (* CPU *)
+        defmach(-2147483647,    2147483647,     'int             '); (* CPU *)
 {       defmach(0,              4294967295,     'unsigned long   ');}(* CPU *)
 end;    (* initialize *)
 

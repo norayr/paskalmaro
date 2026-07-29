@@ -86,6 +86,24 @@ static struct String { char   A[127+1]; } *Alignstr();
 # endif
 extern char *strncpy();
 /*
+**     Definitions for argv-operations
+*/
+int argc;
+char **argv;
+ void
+Argvgt(n, cp, l)
+int n;
+register int l;
+register char *cp;
+{
+ register char *sp;
+
+ for (sp = argv[n]; l > 0 && *sp; l--)
+             *cp++ = *sp++;
+ while (l-- > 0)
+             *cp++ = ' ';
+}
+/*
 **     Start of program definitions
 */
 static char version[]       = "@(#)ptc.p    2.6  Date 87/09/12";
@@ -468,7 +486,8 @@ toknbuf *G202_t;
 boolean usemax, usejmps, usecase, usesets, useunion, usediff,
  usemksub, useintr, usesge, usesle, useseq, usesne,
  usememb, useins, usescpy, usecomp, usealig, usesal,
- usefopn, usescan, usegetl, usenilp, usebool;
+ usefopn, usescan, usegetl, usenilp, usebool, runtimechecks;
+toknbuf argbuf;
 treeptr top;
 treeptr setlst;
 integer setcnt;
@@ -7671,29 +7690,55 @@ eexpr(tp)
    case nindex:
   eselect(tp->U.V39.tvariable);
   (void)fprintf(output.fp, "A["), Putl(output, 0);
-  tq = tp->U.V39.toffset;
-  if (arithexpr(tq))
-   eexpr(tq);
-  else {
-   (void)fprintf(output.fp, "(int)("), Putl(output, 0);
-   eexpr(tq);
-   Putchr(')', output);
-  }
   tq = typeof(tp->U.V39.tvariable);
-  if (tq->tt == narray)
-   if (clower(tq->U.V23.taindx) != 0) {
-    (void)fprintf(output.fp, " - "), Putl(output, 0);
-    tq = typeof(tq->U.V23.taindx);
-    if (tq->tt == nsubrange)
-     if (arithexpr(tq->U.V19.tlo))
-      eexpr(tq->U.V19.tlo);
-     else {
-      (void)fprintf(output.fp, "(int)("), Putl(output, 0);
-      eexpr(tq->U.V19.tlo);
-      Putchr(')', output);
+  if (runtimechecks && (tq->tt == narray)) {
+   (void)fprintf(output.fp, "Chkidx("), Putl(output, 0);
+   if (arithexpr(tp->U.V39.toffset))
+    eexpr(tp->U.V39.toffset);
+   else {
+    (void)fprintf(output.fp, "(int)("), Putl(output, 0);
+    eexpr(tp->U.V39.toffset);
+    Putchr(')', output);
+   }
+   (void)fprintf(output.fp, ",%1d,%1d)", clower(tq->U.V23.taindx), cupper(tq->U.V23.taindx)), Putl(output, 0);
+   if (clower(tq->U.V23.taindx) != 0)
+    (void)fprintf(output.fp, " - %1d", clower(tq->U.V23.taindx)), Putl(output, 0);
+  } else
+   if (runtimechecks && (tq->tt == nconfarr)) {
+    (void)fprintf(output.fp, "Chkidx("), Putl(output, 0);
+    if (arithexpr(tp->U.V39.toffset))
+     eexpr(tp->U.V39.toffset);
+    else {
+     (void)fprintf(output.fp, "(int)("), Putl(output, 0);
+     eexpr(tp->U.V39.toffset);
+     Putchr(')', output);
+    }
+    (void)fprintf(output.fp, ",0,"), Putl(output, 0);
+    printid(tq->U.V22.tcindx->U.V19.thi->U.V43.tsym->U.V6.lid);
+    (void)fprintf(output.fp, "-1)"), Putl(output, 0);
+   } else {
+    if (arithexpr(tp->U.V39.toffset))
+     eexpr(tp->U.V39.toffset);
+    else {
+     (void)fprintf(output.fp, "(int)("), Putl(output, 0);
+     eexpr(tp->U.V39.toffset);
+     Putchr(')', output);
+    }
+    if (tq->tt == narray)
+     if (clower(tq->U.V23.taindx) != 0) {
+      (void)fprintf(output.fp, " - "), Putl(output, 0);
+      tq = typeof(tq->U.V23.taindx);
+      if (tq->tt == nsubrange)
+       if (arithexpr(tq->U.V19.tlo))
+        eexpr(tq->U.V19.tlo);
+       else {
+        (void)fprintf(output.fp, "(int)("), Putl(output, 0);
+        eexpr(tq->U.V19.tlo);
+        Putchr(')', output);
+       }
+      else
+       fatal(etree);
      }
-    else
-     fatal(etree);
    }
   Putchr(']', output);
   break ;
@@ -7705,13 +7750,23 @@ eexpr(tp)
   } else
    if ((*G226_doarrow)) {
     (*G226_doarrow) = false;
+    if (runtimechecks)
+     (void)fprintf(output.fp, "Chknil("), Putl(output, 0);
     eexpr(tp->U.V42.texps);
+    if (runtimechecks)
+     Putchr(')', output);
     (void)fprintf(output.fp, "->"), Putl(output, 0);
     (*G228_donearr) = true;
    } else {
-    (void)fprintf(output.fp, "(*"), Putl(output, 0);
+    if (runtimechecks)
+     (void)fprintf(output.fp, "(*Chknil("), Putl(output, 0);
+    else
+     (void)fprintf(output.fp, "(*"), Putl(output, 0);
     eexpr(tp->U.V42.texps);
-    Putchr(')', output);
+    if (runtimechecks)
+     (void)fprintf(output.fp, "))"), Putl(output, 0);
+    else
+     Putchr(')', output);
    }
   break ;
    case nid:
@@ -8902,6 +8957,22 @@ eprogram(tp)
   (void)fprintf(output.fp, "*/\n"), Putl(output, 1);
   (void)fprintf(output.fp, "%s<stdlib.h>\n", C24_include), Putl(output, 1);
  }
+ if (runtimechecks) {
+  (void)fprintf(output.fp, "/*\n"), Putl(output, 1);
+  (void)fprintf(output.fp, "**     Runtime check support\n"), Putl(output, 1);
+  (void)fprintf(output.fp, "*/\n"), Putl(output, 1);
+  (void)fprintf(output.fp, "%s<signal.h>\n", C24_include), Putl(output, 1);
+  (void)fprintf(output.fp, "%s<stdio.h>\n", C24_include), Putl(output, 1);
+  (void)fprintf(output.fp, "%sChknil(p) ((p)?(p):(fprintf(stderr,\"Fatal: nil pointer dereference\\n\"),exit(1),(p)))\n", C4_define), Putl(output, 1);
+  (void)fprintf(output.fp, "%sChkidx(i,l,h) ((i)>=(l)&&(i)<=(h)?(i):(fprintf(stderr,\"Fatal: array index %%d not in [%%d,%%d]\\n\",(i),(l),(h)),exit(1),(i)))\n", C4_define), Putl(output, 1);
+  (void)fprintf(output.fp, "%s%s\n", C50_static, voidtyp), Putl(output, 1);
+  (void)fprintf(output.fp, "Pasjmp(s)\n"), Putl(output, 1);
+  (void)fprintf(output.fp, "%s%cs;\n", inttyp, tab1), Putl(output, 1);
+  Putchr('{', output),Putchr('\n', output);
+  (void)fprintf(output.fp, "%c%sfprintf(stderr,\"Fatal: memory access violation\\n\");\n", tab1, voidcast), Putl(output, 1);
+  (void)fprintf(output.fp, "%cexit(1);\n", tab1), Putl(output, 1);
+  Putchr('}', output),Putchr('\n', output);
+ }
  if (usecase || usesets || use(dinput) || use(doutput) || use(dwrite) || use(dwriteln) || use(dmessage) || use(deof) || use(deoln) || use(dflush) || use(dpage) || use(dread) || use(dreadln) || use(dclose) || use(dreset) || use(drewrite) || use(dget) || use(dput)) {
   (void)fprintf(output.fp, "/*\n"), Putl(output, 1);
   (void)fprintf(output.fp, "**     Definitions for i/o\n"), Putl(output, 1);
@@ -9160,6 +9231,8 @@ eprogram(tp)
    (void)fprintf(output.fp, "main()\n"), Putl(output, 1);
    Putchr('{', output),Putchr('\n', output);
   }
+  if (runtimechecks)
+   (void)fprintf(output.fp, "%c(void)signal(SIGSEGV, Pasjmp);\n", tab1), Putl(output, 1);
   if (use(dinput))
    (void)fprintf(output.fp, "%cinput.fp = stdin;\n", tab1), Putl(output, 1);
   if (use(doutput))
@@ -10431,8 +10504,13 @@ fatal(m)
 /*
 **     Start of program code
 */
-main()
+main(_ac, _av)
+int _ac;
+char *_av[];
 {
+
+ argc = _ac;
+ argv = _av;
  input.fp = stdin;
  output.fp = stdout;
 # ifdef STDINIT
@@ -10440,6 +10518,11 @@ main()
 # endif
  if (setjmp(J[0].jb))
  goto L9999;
+ runtimechecks = false;
+ if (argc > 1) {
+  Argvgt(1, argbuf.A, sizeof(argbuf.A));
+  runtimechecks = (boolean)((argbuf.A[1 - 1] == '-') && (argbuf.A[2 - 1] == 'r'));
+ }
  initialize();
  if (echo)
   (void)fprintf(output.fp, "# ifdef PASCAL\n"), Putl(output, 1);

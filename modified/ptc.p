@@ -721,7 +721,10 @@ var
         usescan,
         usegetl,
         usenilp,                (* source program uses nil-pointer      *)
-        usebool : boolean;      (* source program writes boolean-values *)
+        usebool,                (* source program writes boolean-values *)
+        runtimechecks : boolean; (* emit runtime safety checks in output *)
+
+        argbuf  : toknbuf;      (* temp buffer for argv                 *)
 
         top     : treeptr;      (* top of parsetree, result from parse  *)
 
@@ -8321,31 +8324,65 @@ var     conflag,
                     begin
                         eselect(tp^.tvariable);
                         write('A[');
-                        tq := tp^.toffset;
-                        if arithexpr(tq) then
-                                eexpr(tq)
-                        else begin
-                                write('(int)(');
-                                eexpr(tq);
-                                write(')')
-                             end;
                         tq := typeof(tp^.tvariable);
-                        if tq^.tt = narray then
+                        if runtimechecks and (tq^.tt = narray) then
+                            begin
+                                (* static array: bounds are compile-time constants *)
+                                write('Chkidx(');
+                                if arithexpr(tp^.toffset) then
+                                        eexpr(tp^.toffset)
+                                else begin
+                                        write('(int)(');
+                                        eexpr(tp^.toffset);
+                                        write(')')
+                                     end;
+                                write(',', clower(tq^.taindx):1,
+                                      ',', cupper(tq^.taindx):1, ')');
                                 if clower(tq^.taindx) <> 0 then
-                                    begin
-                                        write(' - ');
-                                        tq := typeof(tq^.taindx);
-                                        if tq^.tt = nsubrange then
-                                                if arithexpr(tq^.tlo) then
-                                                        eexpr(tq^.tlo)
-                                                else begin
-                                                        write('(int)(');
-                                                        eexpr(tq^.tlo);
-                                                        write(')')
-                                                     end
-                                        else
-                                                fatal(etree)
-                                    end;
+                                        write(' - ', clower(tq^.taindx):1)
+                            end
+                        else if runtimechecks and (tq^.tt = nconfarr) then
+                            begin
+                                (* conformant array: lo=0 always, hi=count;
+                                   valid indices in ptc's model are 0..hi-1 *)
+                                write('Chkidx(');
+                                if arithexpr(tp^.toffset) then
+                                        eexpr(tp^.toffset)
+                                else begin
+                                        write('(int)(');
+                                        eexpr(tp^.toffset);
+                                        write(')')
+                                     end;
+                                write(',0,');
+                                printid(tq^.tcindx^.thi^.tsym^.lid);
+                                write('-1)')
+                            end
+                        else
+                            begin
+                                if arithexpr(tp^.toffset) then
+                                        eexpr(tp^.toffset)
+                                else begin
+                                        write('(int)(');
+                                        eexpr(tp^.toffset);
+                                        write(')')
+                                     end;
+                                if tq^.tt = narray then
+                                        if clower(tq^.taindx) <> 0 then
+                                            begin
+                                                write(' - ');
+                                                tq := typeof(tq^.taindx);
+                                                if tq^.tt = nsubrange then
+                                                        if arithexpr(tq^.tlo) then
+                                                                eexpr(tq^.tlo)
+                                                        else begin
+                                                                write('(int)(');
+                                                                eexpr(tq^.tlo);
+                                                                write(')')
+                                                             end
+                                                else
+                                                        fatal(etree)
+                                            end
+                            end;
                         write(']')
                     end;
                   nderef:
@@ -8361,14 +8398,24 @@ var     conflag,
                         else if doarrow then
                             begin
                                 doarrow := false;
+                                if runtimechecks then
+                                        write('Chknil(');
                                 eexpr(tp^.texps);
+                                if runtimechecks then
+                                        write(')');
                                 write('->');
                                 donearr := true
                             end
                         else begin
-                                write('(*');
+                                if runtimechecks then
+                                        write('(*Chknil(')
+                                else
+                                        write('(*');
                                 eexpr(tp^.texps);
-                                write(')')
+                                if runtimechecks then
+                                        write('))')
+                                else
+                                        write(')')
                              end
                     end;
                   nid:
@@ -9704,6 +9751,28 @@ var     conflag,
                         writeln('*', '/');
                         writeln(include, '<stdlib.h>')  (* LIB *)
                     end;
+                if runtimechecks then
+                    begin
+                        writeln('/', '*');
+                        writeln('**     Runtime check support');
+                        writeln('*', '/');
+                        writeln(include, '<signal.h>');
+                        writeln(include, '<stdio.h>');
+                        writeln(define,
+                            'Chknil(p) ((p)?(p):(fprintf(stderr,',
+                            '"Fatal: nil pointer dereference\n"),exit(1),(p)))');
+                        writeln(define,
+                            'Chkidx(i,l,h) ((i)>=(l)&&(i)<=(h)?(i):(fprintf(stderr,',
+                            '"Fatal: array index %d not in [%d,%d]\n",(i),(l),(h)),exit(1),(i)))');
+                        writeln(static, voidtyp);
+                        writeln('Pasjmp(s)');
+                        writeln(inttyp, tab1, 's;');
+                        writeln('{');
+                        writeln(tab1, voidcast,
+                            'fprintf(stderr,"Fatal: memory access violation\n");');
+                        writeln(tab1, 'exit(1);');
+                        writeln('}')
+                    end;
                 if usecase or usesets or
                    use(dinput) or use(doutput) or
                    use(dwrite) or use(dwriteln) or use(dmessage) or
@@ -10053,6 +10122,9 @@ var     conflag,
                                 writeln('main()');
                                 writeln('{')
                              end;
+                        if runtimechecks then
+                                writeln(tab1,
+                                    '(void)signal(SIGSEGV, Pasjmp);');
                         if use(dinput) then
                                 writeln(tab1, 'input.fp = stdin;');
                         if use(doutput) then
@@ -11248,6 +11320,12 @@ end;
 
 
 begin   (* program *)
+        runtimechecks := false;
+        if argc > 1 then
+            begin
+                argv(1, argbuf);
+                runtimechecks := (argbuf[1] = '-') and (argbuf[2] = 'r')
+            end;
         initialize;
         if echo then
                 writeln('# ifdef PASCAL');

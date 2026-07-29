@@ -427,9 +427,31 @@ currently ignored. It does not request a distinct packed C representation.
 
 ### 5.10 Conformant-array parameters
 
-One-dimensional conformant-array parameters are supported in the traditional
-Pascal form. Nested and multidimensional conformant arrays are currently an
-implementation restriction.
+One-dimensional conformant-array parameters are supported, but only as `var`
+parameters — value-parameter conformant arrays are not implemented:
+
+```pascal
+procedure Fill(var A: array [Lo..Hi: integer] of integer; V: integer);
+var I: integer;
+begin
+    for I := 0 to Hi - 1 do
+        A[I] := V
+end;
+```
+
+**Important implementation differences from ISO 7185:**
+
+- The bounds identifiers `Lo` and `Hi` are **not** accessible as ordinary Pascal
+  variables inside the procedure body. They exist only as implementation details
+  used to generate correct C parameter declarations and array size information.
+- Internally, ptc maps every conformant array to a C array indexed from 0.
+  The lower bound is always set to 0 inside the called procedure. The upper
+  bound parameter receives the element count (= `actual_hi − actual_lo + 1`),
+  not the actual upper bound of the passed array.
+- Therefore, valid C indices inside the procedure are `0` to `Hi − 1` (where
+  `Hi` is the element count), not `Lo` to `Hi` in the ISO sense.
+- Nested and multidimensional conformant arrays are currently a restriction.
+- The `pack` and `unpack` built-ins use conformant arrays internally.
 
 ## 6. Constants and variables
 
@@ -666,9 +688,16 @@ The maintained version checks, among other rules:
 
 The compiler stops at the first detected error.
 
-Runtime-dependent violations are not yet generally checked. Examples include a
-computed array index outside its bounds, division by zero, nil-pointer
-dereference, and computed subrange overflow.
+**Compile-time checks not yet performed** (violations pass through silently):
+
+- uninitialized variables;
+- forward declarations whose body is never supplied;
+- subrange overflow on assignment (e.g. assigning `10` to a `1..5` variable);
+- integer overflow and division by zero.
+
+**Runtime-dependent violations** can optionally be caught with `ptc -r` (see
+§ 16). Without that flag, out-of-bounds indexing, nil-pointer dereference, and
+wild memory access produce undefined C behavior.
 
 ## 12. C type and representation mapping
 
@@ -744,9 +773,22 @@ Notable restrictions or divergences include:
 - `packed` is ignored;
 - implementation limits on strings, sets, identifiers, and conformant arrays;
 - ASCII-oriented `char`;
-- no comprehensive runtime checking yet;
 - some standard errors or dynamic violations may remain unimplemented;
 - C representation and host ABI affect program behavior.
+
+**Conformant-array parameters (ISO §6.6.3.7):**
+
+- Only `var` parameters may be conformant — value-parameter conformant arrays
+  are not implemented.
+- The bound identifiers (e.g. `Lo` and `Hi` in `array [Lo..Hi: integer]`) are
+  **not accessible as Pascal variables** inside the procedure body. ISO 7185
+  requires them to be in scope as integer variables carrying the actual bounds
+  of the passed array.
+- Internally, ptc maps all conformant arrays to 0-based C arrays. The lower
+  bound is always 0 inside the called procedure; the upper-bound parameter
+  carries the element count (`actual_hi − actual_lo + 1`), not the ISO upper
+  bound. Valid indices inside the procedure are `0` to `count − 1`, not
+  `Lo` to `Hi` in the ISO sense.
 
 ISO 7185 is useful as a formal reference for the core language, but a Pascal
 user manual or tutorial is more practical for learning to write programs.
@@ -908,4 +950,64 @@ The current FFI does not provide:
 
 The external symbol is derived from the Pascal identifier. This can fail when
 PTC renames an identifier to avoid a C keyword or runtime-name collision.
+
+## 16. Runtime safety checks (`ptc -r`)
+
+Passing the `-r` flag causes ptc to emit additional safety-checking code in the
+generated C. These checks are compiled into the executable and abort with a
+diagnostic when a violation is detected.
+
+### Usage
+
+```sh
+./ptc -r < program.p > program.c
+cc -std=c89 -o program program.c
+./program
+```
+
+The `-r` flag must be the first command-line argument.
+
+### What is checked
+
+**Nil-pointer dereference.** Every `P^` and `P^.field` dereference is wrapped
+in a `Chknil` macro. If the pointer is nil at runtime, the program aborts:
+
+```
+Fatal: nil pointer dereference
+```
+
+**Static array bounds.** Every index into a statically declared array is
+wrapped in `Chkidx` with the declared compile-time bounds. Violation aborts:
+
+```
+Fatal: array index out of bounds
+```
+
+**Conformant-array bounds.** Index operations on conformant-array parameters
+are checked at runtime against the actual element count supplied by the caller.
+
+**Wild memory access.** A SIGSEGV handler (`Pasjmp`) is registered in `main`
+so that access violations not caught by the above checks produce a diagnostic
+message and a clean exit instead of a bare OS fault.
+
+### What is not reported
+
+- **Source location**: ptc discards source positions during translation, so no
+  file name or line number can be reported at the error site.
+- **Module attribution**: no module system exists, so per-file attribution is
+  not feasible.
+- **Uninitialized variables**: no initialization tracking is performed.
+- **Integer overflow**: not detected.
+
+### Emitted C constructs
+
+```c
+#define Chknil(p) \
+    ((p)?(p):(fprintf(stderr,"Fatal: nil pointer dereference\n"),exit(1),(p)))
+#define Chkidx(i,l,h) \
+    ((i)>=(l)&&(i)<=(h)?(i):(fprintf(stderr,"Fatal: array index out of bounds\n"),exit(1),(i)))
+```
+
+A SIGSEGV handler function `Pasjmp` is emitted, and `signal(SIGSEGV, Pasjmp)`
+is called at the start of the generated `main`.
 

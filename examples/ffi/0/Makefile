@@ -1,7 +1,7 @@
 
 
 all:
-		../../ptc < externaltest.p > externaltest.c
+		../../../ptc < externaltest.p > externaltest.c
 
 		cc -std=c89 \
 		-o externaltest \

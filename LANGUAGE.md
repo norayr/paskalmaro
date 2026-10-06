@@ -431,10 +431,11 @@ One-dimensional conformant-array parameters are supported, but only as `var`
 parameters — value-parameter conformant arrays are not implemented:
 
 ```pascal
-procedure Fill(var A: array [Lo..Hi: integer] of integer; V: integer);
+procedure Fill(var A: array [Lo..Hi: integer] of integer;
+               Count, V: integer);
 var I: integer;
 begin
-    for I := 0 to Hi - 1 do
+    for I := 0 to Count - 1 do
         A[I] := V
 end;
 ```
@@ -451,6 +452,9 @@ end;
 - Therefore, valid C indices inside the procedure are `0` to `Hi − 1` (where
   `Hi` is the element count), not `Lo` to `Hi` in the ISO sense.
 - Nested and multidimensional conformant arrays are currently a restriction.
+- Generated C represents these parameters as element pointers plus an implicit
+  element-count argument. Forwarding passes the pointer and count. Pass an
+  explicit `Count` as above when the Pascal body needs to iterate over the array.
 - The `pack` and `unpack` built-ins use conformant arrays internally.
 
 ## 6. Constants and variables
@@ -702,8 +706,10 @@ wild memory access produce undefined C behavior.
 ## 12. C type and representation mapping
 
 The exact size of a C type is defined by the target C implementation. The
-maintained PTC configuration is intended for ordinary modern systems with
-8-bit `char`, 16-bit `short`, and 32-bit `int`.
+default maintained PTC configuration is intended for ordinary modern systems
+with 8-bit `char`, 16-bit `short`, and 32-bit `int`. `-i16` selects a target with
+8-bit `char` and 16-bit `int`, as used by cc65 and OSDK; it does not change the
+machine on which the translator itself runs.
 
 ### Predefined scalar types
 
@@ -714,7 +720,7 @@ maintained PTC configuration is intended for ordinary modern systems with
 | `integer` | `int` | 4 bytes |
 | `real` | `double` | 8 bytes |
 
-`maxint` is currently 2147483647.
+`maxint` is 2147483647 by default and 32767 with `-i16`.
 
 ### Subrange selection
 
@@ -727,6 +733,20 @@ The maintained machine table selects approximately:
 | `0..65535` | `unsigned short` |
 | `-32768..32767` | `short` |
 | 32-bit signed range | `int` |
+
+With `-i16`, the 16-bit unsigned and signed rows use `unsigned int` and `int`.
+This matters particularly for OSDK, whose `short` is only 8 bits. Larger signed
+subranges use `long`; predefined Pascal `integer` still means native C `int`.
+The profile also casts scalar call arguments to the declared parameter type,
+so an address literal such as 48000 is passed as a 16-bit unsigned value rather
+than an implicitly wider C literal. Declare addresses as `0..65535`, and use
+`unsigned int` on the C side.
+
+This is a small-target representation profile, not a complete machine-specific
+Pascal implementation. Literal/assignment overflow is not diagnosed, and
+wide arithmetic, formatted I/O on wide subranges, floating point, sets, and
+structured value parameters still need target-specific validation. The retro
+examples exercise the scalar/array/procedure subset and C hardware interfaces.
 
 Consequently, aliases similar to some Turbo Pascal scalar types can be declared
 manually:
@@ -951,63 +971,155 @@ The current FFI does not provide:
 The external symbol is derived from the Pascal identifier. This can fail when
 PTC renames an identifier to avoid a C keyword or runtime-name collision.
 
-## 16. Runtime safety checks (`ptc -r`)
+## 16. Runtime safety checks
 
-Passing the `-r` flag causes ptc to emit additional safety-checking code in the
-generated C. These checks are compiled into the executable and abort with a
-diagnostic when a violation is detected.
-
-### Usage
+`-r` generates C89 check functions directly in each translation. `-e` enables
+the same checks but emits `#include "ptc_checks.h"` and links the implementation
+separately. Options can appear in any order, and checks can be combined with
+`-c` console I/O.
 
 ```sh
 ./ptc -r < program.p > program.c
 cc -std=c89 -o program program.c
-./program
+
+# Or: one implementation shared by separately translated files
+./ptc -e < program.p > program.c
+cc -std=c89 -Iruntime -o program program.c runtime/ptc_checks.c
 ```
 
-The `-r` flag must be the first command-line argument.
+### Checked operations
 
-### What is checked
+- **Nil pointers:** pointer dereferences call `Chknil`; generated casts retain
+  the original pointer type for record fields and other pointee types.
+- **Static arrays:** each index is checked against its declared lower and upper
+  bounds before adjusting to a zero-based C index.
+- **Conformant arrays:** each index is checked against `0..element_count-1`.
 
-**Nil-pointer dereference.** Every `P^` and `P^.field` dereference is wrapped
-in a `Chknil` macro. If the pointer is nil at runtime, the program aborts:
+Both pointer and index arguments are evaluated **once**. These are functions,
+not expression-repeating macros; a function call used as an index therefore
+keeps its normal Pascal side effects.
 
-```
-Fatal: nil pointer dereference
-```
+The hosted failure handler prints `Fatal: nil pointer dereference` or
+`Fatal: array index out of bounds` to stderr and exits with status 1. There is
+no signal handler or runtime initialization. A non-nil invalid pointer is not
+made valid by checking it: wild pointers, use-after-free, uninitialized values,
+arithmetic overflow, and division by zero are not detected by these checks.
+No Pascal source location is currently included in runtime diagnostics.
 
-**Static array bounds.** Every index into a statically declared array is
-wrapped in `Chkidx` with the declared compile-time bounds. Violation aborts:
+### Minimal and custom failure handling
 
-```
-Fatal: array index out of bounds
-```
-
-**Conformant-array bounds.** Index operations on conformant-array parameters
-are checked at runtime against the actual element count supplied by the caller.
-
-**Wild memory access.** A SIGSEGV handler (`Pasjmp`) is registered in `main`
-so that access violations not caught by the above checks produce a diagnostic
-message and a clean exit instead of a bare OS fault.
-
-### What is not reported
-
-- **Source location**: ptc discards source positions during translation, so no
-  file name or line number can be reported at the error site.
-- **Module attribution**: no module system exists, so per-file attribution is
-  not feasible.
-- **Uninitialized variables**: no initialization tracking is performed.
-- **Integer overflow**: not detected.
-
-### Emitted C constructs
+`-m -r` emits the checks without a dependency on stdio, stdlib, or signals.
+Its default handler stops forever on failure. With `PTC_CUSTOM_FAIL` defined
+when compiling C, the generated support instead calls your handler:
 
 ```c
-#define Chknil(p) \
-    ((p)?(p):(fprintf(stderr,"Fatal: nil pointer dereference\n"),exit(1),(p)))
-#define Chkidx(i,l,h) \
-    ((i)>=(l)&&(i)<=(h)?(i):(fprintf(stderr,"Fatal: array index out of bounds\n"),exit(1),(i)))
+void PtcFail(int code); /* MUST NOT return */
 ```
 
-A SIGSEGV handler function `Pasjmp` is emitted, and `signal(SIGSEGV, Pasjmp)`
-is called at the start of the generated `main`.
+Codes are 1 for nil, 2 for array bounds, and 3 for a missing `case` arm in minimal
+mode. Missing `case` arms already have a fatal handler even without `-r`.
+An `otherwise` arm handles all remaining values normally.
 
+For linked checks, choose the runtime policy when compiling the runtime itself:
+
+```sh
+./ptc -m -e -i16 < program.p > program.c
+# Supply a target-specific non-returning handler in hardware.c:
+cl65 -t atmos -Iruntime -DPTC_CUSTOM_FAIL -o program.tap \
+    program.c hardware.c runtime/ptc_checks.c
+```
+
+Alternatively, compile `runtime/ptc_checks.c` with `PTC_MINIMAL` for the default
+infinite-loop handler. Without either C define, linked checks use the hosted
+stderr/exit policy even if Pascal was translated with `-m`.
+
+On contemporary machines, C sanitizers complement these language checks:
+
+```sh
+cc -std=c89 -g -fsanitize=address,undefined -o program program.c
+```
+
+### Next useful checks
+
+Subrange assignment, `chr`/`succ`/`pred` range violations, division by zero,
+allocation failure, and arithmetic overflow would be useful additions. They
+are not implemented by these options. Overflow needs a target-width-aware
+design; checking a result after overflowing signed C arithmetic is too late.
+
+## 17. Minimal generated support (`-m`)
+
+This option removes **implicit** hosted requirements, rather than suppressing
+requested Pascal features:
+
+| Feature used | Requirements |
+|---|---|
+| Scalar logic, arrays, records, ordinary routines, external hardware calls | No C library |
+| Assignment of a string literal to a character array | Generated bounded copy loop |
+| Nil/index checks and missing case arms | Check functions and a non-returning failure handler |
+| `new` / `dispose` | `malloc` / `free` |
+| Pascal text/typed files and formatted I/O | Existing stdio/file runtime |
+| Console I/O with `-c` | Project console helpers and a target character adapter |
+| Character-array comparisons | `strncmp` |
+| Sets | Existing set runtime and its diagnostic dependencies |
+| Non-local `goto` | `setjmp` / `longjmp` |
+| Real mathematics | Target real arithmetic and math library |
+
+A minimal main program returns 0 instead of calling `exit(0)`. Unused alignment
+support is omitted for sources without sets or string-literal arguments. The C
+toolchain's startup and arithmetic helpers remain necessary on targets like
+the 6502. `-m` is not a promise that every Pascal feature fits every small C
+compiler; it makes the useful low-dependency subset available without file I/O
+or heap support.
+
+## 18. Optional console backend (`-c`)
+
+`-c` implies `-m` and selects a separate character-console implementation of
+Pascal I/O. It is useful when a C toolchain has character I/O but lacks the full
+stdio/file API or Pascal-compatible printf/scanf formatting. `integer` remains
+native C int; also use `-i16` with a 16-bit target.
+
+```sh
+./ptc -c < program.p > program.c
+cc -std=c89 -Iruntime -o program program.c \
+    runtime/ptc_console_input.c runtime/ptc_console_output.c \
+    runtime/ptc_console_host.c
+```
+
+Generated console I/O uses `ptc_console.h`, without FILE wrappers or system
+headers. Input/output helpers are separate, shared across translated files,
+and need no C library. Exactly one adapter implements character input/output,
+flush, and a non-returning failure hook. The host adapter uses C character I/O;
+the Oric adapter uses OSDK character I/O or cc65 conio, with each compiler
+handling its own ABI.
+
+Output supports characters, string literals, fixed/conformant character arrays,
+native signed/unsigned integers, booleans, and nonnegative minimum field widths.
+Integer default width remains 10. Arrays write every cell, including embedded
+NULs. Each output item is a separate statement: items are processed in source
+order and each expression/width is evaluated once. C argument order within an
+item remains unspecified.
+
+Input supports characters, native integers/integer subranges, and bounded
+whitespace-delimited words into character arrays. Overflow/subrange violations,
+malformed integers, oversized words, premature EOF, and device errors invoke
+`PtcConsoleFail`. Boolean input, real I/O, and input field formats are not
+implemented. With `-i16`, I/O of subranges wider than native signed/unsigned int
+is rejected rather than silently narrowed.
+
+`eof`/`eoln` use a shared lazy lookahead without consuming characters. EOF is
+sticky, CRLF/bare CR normalize to LF, and `readln` handles an unterminated last
+line without looping. It does not prefetch the next line after Enter. Character
+reads preserve whitespace; a consumed line boundary becomes a space.
+
+Only predefined input/output streams are supported. Explicit stream arguments
+must select the appropriate one. Named/typed files, user-defined text objects,
+file-buffer designators, `get`/`put`, and open/close operations are diagnosed
+during translation. `flush` calls the adapter, `page` outputs form feed, and
+`message` writes a line on the same console. Main flushes before returning;
+interactive prompts should explicitly flush before reading.
+
+This is an application-oriented console profile. The normal profile retains
+the historical file runtime and remains the compiler's self-hosting build.
+Allocation, sets, string comparisons, and other features keep their dependencies.
+See `runtime/README.md` for the adapter contract, input semantics, error codes,
+and target build details.

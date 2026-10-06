@@ -50,7 +50,7 @@ extern int strncmp();
 typedef char boolean;
 # define false (boolean)0
 # define true (boolean)1
-static char *Bools[];
+static char *Bools[2];
 typedef int integer;
 # define maxint 2147483647
 /*
@@ -450,9 +450,10 @@ typedef enum { ebadsymbol, elongstring, elongtokn, erange,
  eindex, enotrecord, enotpointer, eforctrl,
  eboolxp, ecasetype, edupcase, enofunresult,
  eprocexpr, eidkind, etypeexpected, econstexpected,
- ecalltarget, efuncstmt, ebadrange }  errors;
+ ecalltarget, efuncstmt, ebadrange, econsolefile,
+ econsoletype, econsoleop }  errors;
 typedef struct { char A[machdeflen - 1 + 1]; } machdefstr;
-typedef struct { struct S232 {
+typedef struct { struct S236 {
  keyword wrd;
  symtyp sym;
 } A[keytablen + 1]; } T66;
@@ -463,19 +464,21 @@ typedef struct { symptr A[50]; } T70;
 typedef struct { treeptr A[11]; } T71;
 typedef struct { unsigned char A[(int)(nnil) - (int)(nassign) + 1]; } T72;
 typedef struct { idptr A[61]; } T73;
-typedef struct { struct S219 {
+typedef struct { struct S223 {
  integer lolim, hilim;
  strindx typstr;
 } A[maxmachdefs - 1 + 1]; } T74;
 typedef struct { char A[15 + 1]; } T75;
 typedef struct { setword S[2]; } bitset;
-integer *G230_indnt;
-boolean *G228_donearr;
-boolean *G226_doarrow;
-boolean *G224_dropset;
-boolean *G222_setused;
-boolean *G220_conflag;
-integer *G217_nelems;
+integer *G234_indnt;
+boolean *G232_donearr;
+boolean *G230_doarrow;
+boolean *G228_dropset;
+boolean *G226_setused;
+boolean *G224_conflag;
+integer *G221_nelems;
+predefs *G219_td;
+treeptr *G217_tp;
 treeptr *G215_vp;
 treeptr *G213_tv;
 symptr *G211_iq;
@@ -487,6 +490,8 @@ boolean usemax, usejmps, usecase, usesets, useunion, usediff,
  usemksub, useintr, usesge, usesle, useseq, usesne,
  usememb, useins, usescpy, usecomp, usealig, usesal,
  usefopn, usescan, usegetl, usenilp, usebool, runtimechecks;
+boolean minimal, externalchecks, target16, consoleio, usestrcopy, usealignstrings;
+integer targetmaxint, argi;
 toknbuf argbuf;
 treeptr top;
 treeptr setlst;
@@ -678,6 +683,15 @@ prtmsg(m)
   break ;
    case ebadrange:
   (void)fprintf(stderr, "%sInvalid subrange bounds\n", user), Putl(output, 1);
+  break ;
+   case econsolefile:
+  (void)fprintf(stderr, "%sConsole backend supports only standard input/output\n", restr), Putl(output, 1);
+  break ;
+   case econsoletype:
+  (void)fprintf(stderr, "%sUnsupported console I/O type, format or integer range\n", restr), Putl(output, 1);
+  break ;
+   case econsoleop:
+  (void)fprintf(stderr, "%sOperation is not supported by console backend\n", restr), Putl(output, 1);
   break ;
    default:
   Caseerror(Line);
@@ -3837,7 +3851,10 @@ identicaltype(tl, tr)
    if ((ta->tt == narray) && (tb->tt == nconfarr))
     R171 = sametype(ta->U.V23.taelem, tb->U.V22.tcelem);
    else
-    R171 = false;
+    if ((ta->tt == nconfarr) && (tb->tt == nconfarr))
+     R171 = sametype(ta->U.V22.tcelem, tb->U.V22.tcelem);
+    else
+     R171 = false;
  return R171;
 }
 
@@ -4167,6 +4184,61 @@ checkset(tp, fn)
  }
 }
 
+void checkpredef();
+
+ void
+consolestream(tp, stream)
+ treeptr tp;
+ predefs stream;
+{
+ if (tp != (struct S64 *)NIL) {
+  if (tp->tt != nid)
+   semerror(tp, econsolefile);
+  if (tp->U.V43.tsym != defnams.A[(int)(stream)])
+   semerror(tp, econsolefile);
+ }
+}
+
+ void
+consolevalue(tp, reading)
+ treeptr tp;
+ boolean reading;
+{
+ treeptr tq, tb;
+ integer lo, hi;
+
+ if (tp->tt == nformat) {
+  if (reading || (tp->U.V41.texpl->tt == nformat))
+   semerror(tp, econsoletype);
+  if (constant(tp->U.V41.texpr))
+   if ((cvalof(tp->U.V41.texpr) < 0) || (cvalof(tp->U.V41.texpr) > targetmaxint))
+    semerror(tp, econsoletype);
+  consolevalue(tp->U.V41.texpr, false);
+  tp = tp->U.V41.texpl;
+ }
+ tq = typeof(tp);
+ tb = basetype(tp);
+ if (!((tb == typnods.A[(int)(tinteger)]) || (tb == typnods.A[(int)(tchar)]) || ((tb == typnods.A[(int)(tboolean)]) && !reading) || ((tq == typnods.A[(int)(tstring)]) && !reading) || chararray(tp)))
+  semerror(tp, econsoletype);
+ if (target16 && (tb == typnods.A[(int)(tinteger)])) {
+  if (tq->tt == nsubrange) {
+   lo = cvalof(tq->U.V19.tlo);
+   hi = cvalof(tq->U.V19.thi);
+   if ((lo < -32768) || (hi > 65535) || ((lo < 0) && (hi > 32767)))
+    semerror(tp, econsoletype);
+  } else
+   if (constant(tp))
+    if ((cvalof(tp) < -32768) || (cvalof(tp) > 32767))
+     semerror(tp, econsoletype);
+ }
+ if (target16 && (tq->tt == narray)) {
+  tb = typeof(tq->U.V23.taindx);
+  if (tb->tt == nsubrange)
+   if (cvalof(tb->U.V19.thi) - cvalof(tb->U.V19.tlo) + 1 > targetmaxint)
+    semerror(tp, econsoletype);
+ }
+}
+
  void
 checkpredef(pd, cp, fn)
  predefs pd;
@@ -4383,6 +4455,38 @@ checkpredef(pd, cp, fn)
    }
   }
  }
+ if (consoleio) {
+  switch ((int)(pd)) {
+    case deof:  case deoln:
+   consolestream(a, dinput);
+   break ;
+    case dflush:  case dpage:
+   consolestream(a, doutput);
+   break ;
+    case dget:  case dput:  case dclose:  case dreset:
+    case drewrite:
+   semerror(cp, econsoleop);
+   break ;
+    case dread:  case dreadln:  case dwrite:  case dwriteln:
+    case dmessage:
+   tq = a;
+   if ((tq != (struct S64 *)NIL) && (pd != dmessage))
+    if (filetype(tq)) {
+     if (Member((unsigned)(pd), Conset[142]))
+      consolestream(tq, dinput);
+     else
+      consolestream(tq, doutput);
+     tq = tq->tnext;
+    }
+   while (tq != (struct S64 *)NIL) {
+    consolevalue(tq, (boolean)(Member((unsigned)(pd), Conset[143])));
+    tq = tq->tnext;
+   }
+   break ;
+    default:
+   ;
+  }
+ }
 }
 
  void
@@ -4398,25 +4502,25 @@ checkcall(cp, fn, expression)
  sd = idup(cp->U.V30.tcall);
  if (sd == (struct S64 *)NIL)
   semerror(cp, ecalltarget);
- if (!(Member((unsigned)(sd->tt), Conset[142])))
+ if (!(Member((unsigned)(sd->tt), Conset[144])))
   semerror(cp, ecalltarget);
  if (expression) {
-  if (Member((unsigned)(sd->tt), Conset[143]))
+  if (Member((unsigned)(sd->tt), Conset[145]))
    semerror(cp, eprocexpr);
  } else
-  if (Member((unsigned)(sd->tt), Conset[144]))
+  if (Member((unsigned)(sd->tt), Conset[146]))
    semerror(cp, efuncstmt);
- if ((Member((unsigned)(sd->tt), Conset[145])) && (sd->U.V13.tsubstmt != (struct S64 *)NIL) && (sd->U.V13.tsubstmt->tt == npredef)) {
+ if ((Member((unsigned)(sd->tt), Conset[147])) && (sd->U.V13.tsubstmt != (struct S64 *)NIL) && (sd->U.V13.tsubstmt->tt == npredef)) {
   pd = sd->U.V13.tsubstmt->U.V12.tdef;
   checkpredef(pd, cp, fn);
  } else {
-  if (Member((unsigned)(sd->tt), Conset[146]))
+  if (Member((unsigned)(sd->tt), Conset[148]))
    firstformal(sd->U.V13.tsubpar, &fp, &fi);
   else
    firstformal(sd->U.V15.tparparm, &fp, &fi);
   ap = cp->U.V30.taparm;
   while ((fi != (struct S64 *)NIL) && (ap != (struct S64 *)NIL)) {
-   if (Member((unsigned)(fp->tt), Conset[147])) {
+   if (Member((unsigned)(fp->tt), Conset[149])) {
     checkexpr(ap, fn);
     if (fp->tt == nvarpar) {
      if (!variable(ap, fn))
@@ -4454,7 +4558,7 @@ checkexpr(tp, fn)
   tq = idup(tp);
   if (tq == (struct S64 *)NIL)
    semerror(tp, eidkind);
-  if (!(Member((unsigned)(tq->tt), Conset[148])))
+  if (!(Member((unsigned)(tq->tt), Conset[150])))
    semerror(tp, eidkind);
   break ;
    case ninteger:  case nreal:  case nchar:  case nstring:
@@ -4524,11 +4628,11 @@ checkexpr(tp, fn)
     ;
    else
     if (((tl->tt == nptr) && (tr == typnods.A[(int)(tnil)])) || ((tr->tt == nptr) && (tl == typnods.A[(int)(tnil)])) || ((tl->tt == nptr) && sametype(tl, tr))) {
-     if (!(Member((unsigned)(tp->tt), Conset[149])))
+     if (!(Member((unsigned)(tp->tt), Conset[151])))
       semerror(tp, eoperand);
     } else
      if (((tl->tt == nsetof) || (tl == typnods.A[(int)(tset)])) && ((tr->tt == nsetof) || (tr == typnods.A[(int)(tset)]))) {
-      if (!(Member((unsigned)(tp->tt), Conset[150])))
+      if (!(Member((unsigned)(tp->tt), Conset[152])))
        semerror(tp, eoperand);
       if (!setcompatible(tp->U.V41.texpl, tp->U.V41.texpr))
        semerror(tp, eoperand);
@@ -4593,6 +4697,8 @@ checkexpr(tp, fn)
    case nderef:
   checkexpr(tp->U.V42.texps, fn);
   tq = typeof(tp->U.V42.texps);
+  if (consoleio && ((tq->tt == nfileof) || (tq == typnods.A[(int)(ttext)])))
+   semerror(tp, econsoleop);
   if (!((tq->tt == nptr) || (tq->tt == nfileof) || (tq == typnods.A[(int)(ttext)])))
    semerror(tp, enotpointer);
   break ;
@@ -4624,6 +4730,8 @@ checktype(tp)
     checktype(tq->U.V14.tbind);
     break ;
      case npredef:
+    if (consoleio && (tp->U.V12.tdef == dtext))
+     semerror(tp, econsolefile);
     break ;
      case nptr:
     checktype(tp->U.V16.tptrid);
@@ -4658,6 +4766,8 @@ checktype(tp)
      semerror(tp, eoperand);
     break ;
      case nfileof:
+    if (consoleio)
+     semerror(tp, econsolefile);
     checktype(tp->U.V18.tof);
     break ;
      case nrecord:
@@ -4756,7 +4866,7 @@ resulttype(tp)
  treeptr tq;
 
  tq = typeof(tp);
- R182 = (boolean)(!(Member((unsigned)(tq->tt), Conset[151])));
+ R182 = (boolean)(!(Member((unsigned)(tq->tt), Conset[153])));
  return R182;
 }
 
@@ -4824,6 +4934,8 @@ checkstmt(tp, fn, assigned)
    break ;
     case nassign:
    checkexpr(tp->U.V27.trhs, fn);
+   if (consoleio && filetype(tp->U.V27.tlhs))
+    semerror(tp, econsoleop);
    if (functionresult(tp->U.V27.tlhs, fn)) {
     if (!assignable(fn->U.V13.tfuntyp, tp->U.V27.trhs))
      semerror(tp, easgntype);
@@ -4927,6 +5039,8 @@ semcheck()
 {
  boolean assigned;
 
+ if (consoleio && (top->U.V13.tsubpar != (struct S64 *)NIL))
+  semerror(top, econsolefile);
  checkconstants(top->U.V13.tsubconst, top);
  checktypedecls(top->U.V13.tsubtype);
  checktypedecls(top->U.V13.tsubvar);
@@ -5011,7 +5125,7 @@ clower(tp)
     R184 = 0;
    else
     if (tq == typnods.A[(int)(tinteger)])
-     R184 = -maxint;
+     R184 = -targetmaxint;
     else
      fatal(etree);
  return R184;
@@ -5045,7 +5159,7 @@ cupper(tp)
     R185 = maxchar;
    else
     if (tq == typnods.A[(int)(tinteger)])
-     R185 = maxint;
+     R185 = targetmaxint;
     else
      fatal(etree);
  return R185;
@@ -5098,9 +5212,9 @@ islocal(tp)
  treeptr tq;
 
  tq = tp->U.V43.tsym->lsymdecl;
- while (!(Member((unsigned)(tq->tt), Conset[152])))
+ while (!(Member((unsigned)(tq->tt), Conset[154])))
   tq = tq->tup;
- while (!(Member((unsigned)(tp->tt), Conset[153])))
+ while (!(Member((unsigned)(tp->tt), Conset[155])))
   tp = tp->tup;
  R189 = (boolean)(tp == tq);
  return R189;
@@ -5320,7 +5434,7 @@ extract(tp)
   tp->U.V13.tsubvar = xtrenum(tp->U.V13.tsubvar, tp);
   vp = tp->U.V13.tsubvar;
   while (vp != (struct S64 *)NIL) {
-   if (Member((unsigned)(vp->U.V14.tbind->tt), Conset[154]))
+   if (Member((unsigned)(vp->U.V14.tbind->tt), Conset[156]))
     vp->U.V14.tbind = xtrit(vp->U.V14.tbind, tp, true);
    vp = vp->tnext;
   }
@@ -5489,7 +5603,7 @@ stackop(decl, glob, loc)
  }
  ip->tup = dp;
  tp = decl;
- while (!(Member((unsigned)(tp->tt), Conset[155])))
+ while (!(Member((unsigned)(tp->tt), Conset[157])))
   tp = tp->tup;
  dp->tup = tp;
  if (tp->U.V13.tsubvar == (struct S64 *)NIL)
@@ -5635,7 +5749,7 @@ cklevel(tp)
  treeptr tp;
 {
  tp = tp->U.V43.tsym->lsymdecl;
- while (!(Member((unsigned)(tp->tt), Conset[156])))
+ while (!(Member((unsigned)(tp->tt), Conset[158])))
   tp = tp->tup;
  if (tp->U.V13.tstat > maxlevel)
   maxlevel = tp->U.V13.tstat;
@@ -5739,7 +5853,7 @@ global(tp, dp, depend)
    break ;
     case nfor:
    ip = idup(tp->U.V34.tforid);
-   if (Member((unsigned)(ip->tup->tt), Conset[157]))
+   if (Member((unsigned)(ip->tup->tt), Conset[159]))
     registervar(tp->U.V34.tforid);
    global(tp->U.V34.tforid, dp, depend);
    global(tp->U.V34.tfrom, dp, depend);
@@ -5786,6 +5900,8 @@ global(tp, dp, depend)
    global(tp->U.V41.texpr, dp, depend);
    break ;
     case nassign:
+   if (typeof(tp->U.V27.trhs) == typnods.A[(int)(tstring)])
+    usestrcopy = true;
    global(tp->U.V27.tlhs, dp, depend);
    global(tp->U.V27.trhs, dp, depend);
    break ;
@@ -5804,6 +5920,13 @@ global(tp, dp, depend)
    break ;
     case ncall:
    global(tp->U.V30.tcall, dp, depend);
+   ip = tp->U.V30.taparm;
+   while (ip != (struct S64 *)NIL) {
+    if (typeof(ip) == typnods.A[(int)(tstring)])
+     if (!(consoleio && ((tp->U.V30.tcall->U.V43.tsym == defnams.A[(int)(dwrite)]) || (tp->U.V30.tcall->U.V43.tsym == defnams.A[(int)(dwriteln)]) || (tp->U.V30.tcall->U.V43.tsym == defnams.A[(int)(dmessage)]))))
+      usealignstrings = true;
+    ip = ip->tnext;
+   }
    global(tp->U.V30.taparm, dp, depend);
    break ;
     case nid:
@@ -5814,7 +5937,7 @@ global(tp, dp, depend)
     ip = ip->tup;
     if (ip == (struct S64 *)NIL)
      goto L555;
-   } while (!(Member((unsigned)(ip->tt), Conset[158])));
+   } while (!(Member((unsigned)(ip->tt), Conset[160])));
    if (dp == ip) {
     if (depend)
      tp->U.V43.tsym->U.V6.lused = true;
@@ -5954,7 +6077,7 @@ fileinit(ti, tq, opn)
   ty->U.V14.tidl = tz;
   ty->U.V14.tbind = typeof(tq->U.V23.taindx);
   tz = tq;
-  while (!(Member((unsigned)(tz->tt), Conset[159])))
+  while (!(Member((unsigned)(tz->tt), Conset[161])))
    tz = tz->tup;
   linkup(tz, ty);
   if (tz->U.V13.tsubvar == (struct S64 *)NIL)
@@ -6095,13 +6218,13 @@ void emit();
  void
 increment()
 {
- (*G230_indnt) = (*G230_indnt) + indstep;
+ (*G234_indnt) = (*G234_indnt) + indstep;
 }
 
  void
 decrement()
 {
- (*G230_indnt) = (*G230_indnt) - indstep;
+ (*G234_indnt) = (*G234_indnt) - indstep;
 }
 
  void
@@ -6109,7 +6232,7 @@ indent()
 {
  integer i;
 
- i = (*G230_indnt);
+ i = (*G234_indnt);
  if (i > 60)
   i = i / tabwidth * tabwidth;
  while (i >= tabwidth) {
@@ -6148,14 +6271,14 @@ eselect(tp)
 {
  boolean da;
 
- da = (*G226_doarrow);
- (*G226_doarrow) = true;
+ da = (*G230_doarrow);
+ (*G230_doarrow) = true;
  eexpr(tp);
- if ((*G228_donearr))
-  (*G228_donearr) = false;
+ if ((*G232_donearr))
+  (*G232_donearr) = false;
  else
   Putchr('.', output);
- (*G226_doarrow) = da;
+ (*G230_doarrow) = da;
 }
 
 void epredef();
@@ -6195,15 +6318,15 @@ typeletter(tp)
     else
      if (tq == typnods.A[(int)(tboolean)]) {
       R197 = 'b';
-      (*G217_nelems) = 6;
+      (*G221_nelems) = 6;
      } else
       if (tq->tt == narray) {
        R197 = 'a';
-       (*G217_nelems) = crange(tq->U.V23.taindx);
+       (*G221_nelems) = crange(tq->U.V23.taindx);
       } else
        if (tq->tt == nconfarr) {
         R197 = 'v';
-        (*G217_nelems) = 0;
+        (*G221_nelems) = 0;
        } else
         fatal(etree);
 L999:
@@ -6270,7 +6393,7 @@ eformat(tq)
     eexpr(tq->U.V41.texpr);
    else
     Putchr('*', output);
-  (void)fprintf(output.fp, ".%1ds", (*G217_nelems)), Putl(output, 0);
+  (void)fprintf(output.fp, ".%1ds", (*G221_nelems)), Putl(output, 0);
   break ;
    case 'b':
   Putchr(percent, output);
@@ -6572,6 +6695,131 @@ enewsize(tp)
  }
 }
 
+void econsole();
+
+ void
+arraydata(value, typ)
+ treeptr value, typ;
+{
+ eexpr(value);
+ if (typ->tt == narray)
+  (void)fprintf(output.fp, ".A"), Putl(output, 0);
+ (void)fprintf(output.fp, ", "), Putl(output, 0);
+ if (typ->tt == narray)
+  (void)fprintf(output.fp, "%1d", crange(typ->U.V23.taindx)), Putl(output, 0);
+ else
+  printid(typ->U.V22.tcindx->U.V19.thi->U.V43.tsym->U.V6.lid);
+}
+
+ void
+econsole()
+{
+ treeptr item, value, width, typ;
+ char letter;
+
+ if ((*G219_td) == deof)
+  (void)fprintf(output.fp, "PtcConsoleEof()"), Putl(output, 0);
+ else
+  if ((*G219_td) == deoln)
+   (void)fprintf(output.fp, "PtcConsoleEoln()"), Putl(output, 0);
+  else
+   if ((*G219_td) == dflush)
+    (void)fprintf(output.fp, "PtcFlush();\n"), Putl(output, 1);
+   else
+    if ((*G219_td) == dpage)
+     (void)fprintf(output.fp, "PtcPutChar(12);\n"), Putl(output, 1);
+    else {
+     item = (*G217_tp)->U.V30.taparm;
+     if ((item != (struct S64 *)NIL) && ((*G219_td) != dmessage))
+      if (typeof(item) == typnods.A[(int)(ttext)])
+       item = item->tnext;
+     Putchr('{', output),Putchr('\n', output);
+     increment();
+     while (item != (struct S64 *)NIL) {
+      width = (struct S64 *)NIL;
+      value = item;
+      if (item->tt == nformat) {
+       width = item->U.V41.texpr;
+       value = item->U.V41.texpl;
+      }
+      typ = typeof(value);
+      letter = typeletter(value);
+      indent();
+      if (Member((unsigned)((*G219_td)), Conset[162])) {
+       if (Member((unsigned)(letter), Conset[163])) {
+        (void)fprintf(output.fp, "PtcReadWord("), Putl(output, 0);
+        arraydata(value, typ);
+        Putchr(')', output);
+       } else {
+        eexpr(value);
+        (void)fprintf(output.fp, " = "), Putl(output, 0);
+        if (letter == 'c')
+         (void)fprintf(output.fp, "PtcReadChar()"), Putl(output, 0);
+        else
+         if (typ->tt == nsubrange) {
+          if (clower(typ) >= 0)
+           (void)fprintf(output.fp, "PtcReadUInt("), Putl(output, 0);
+          else
+           (void)fprintf(output.fp, "PtcReadSigned("), Putl(output, 0);
+          (void)fprintf(output.fp, "%1d, %1d)", clower(typ), cupper(typ)), Putl(output, 0);
+         } else
+          (void)fprintf(output.fp, "PtcReadInt()"), Putl(output, 0);
+       }
+      } else {
+       switch ((int)(letter)) {
+         case 'c':
+        (void)fprintf(output.fp, "PtcWriteChar("), Putl(output, 0);
+        break ;
+         case 'b':
+        (void)fprintf(output.fp, "PtcWriteBool("), Putl(output, 0);
+        break ;
+         case 's':  case 'a':  case 'v':
+        (void)fprintf(output.fp, "PtcWriteText("), Putl(output, 0);
+        break ;
+         case 'd':
+        if ((typ->tt == nsubrange) && (clower(typ) >= 0))
+         (void)fprintf(output.fp, "PtcWriteUInt("), Putl(output, 0);
+        else
+         (void)fprintf(output.fp, "PtcWriteInt("), Putl(output, 0);
+        break ;
+         default:
+        Caseerror(Line);
+       }
+       if (Member((unsigned)(letter), Conset[164]))
+        arraydata(value, typ);
+       else {
+        eexpr(value);
+        if (letter == 's')
+         (void)fprintf(output.fp, ", -1"), Putl(output, 0);
+       }
+       (void)fprintf(output.fp, ", "), Putl(output, 0);
+       if (width != (struct S64 *)NIL) {
+        (void)fprintf(output.fp, "(int)("), Putl(output, 0);
+        eexpr(width);
+        Putchr(')', output);
+       } else
+        if (letter == 'd')
+         (void)fprintf(output.fp, "%1d", intlen), Putl(output, 0);
+        else
+         Putchr('0', output);
+       Putchr(')', output);
+      }
+      Putchr(';', output),Putchr('\n', output);
+      item = item->tnext;
+     }
+     if (Member((unsigned)((*G219_td)), Conset[165])) {
+      indent();
+      if ((*G219_td) == dreadln)
+       (void)fprintf(output.fp, "PtcReadLn();\n"), Putl(output, 1);
+      else
+       (void)fprintf(output.fp, "PtcPutChar(10);\n"), Putl(output, 1);
+     }
+     decrement();
+     indent();
+     Putchr('}', output),Putchr('\n', output);
+    }
+}
+
  void
 epredef(ts, tp)
  treeptr ts, tp;
@@ -6581,130 +6829,140 @@ epredef(ts, tp)
  integer nelems;
  char ch;
  boolean txtfile;
- integer *F218;
+ treeptr *F218;
+ predefs *F220;
+ integer *F222;
 
- F218 = G217_nelems;
- G217_nelems = &nelems;
- td = ts->U.V13.tsubstmt->U.V12.tdef;
- switch ((int)(td)) {
+ F222 = G221_nelems;
+ G221_nelems = &nelems;
+ F220 = G219_td;
+ G219_td = &td;
+ F218 = G217_tp;
+ G217_tp = &tp;
+ (*G219_td) = ts->U.V13.tsubstmt->U.V12.tdef;
+ if (consoleio && (Member((unsigned)((*G219_td)), Conset[166]))) {
+  econsole();
+  goto L999;
+ }
+ switch ((int)((*G219_td))) {
    case dabs:
-  tq = typeof(tp->U.V30.taparm);
+  tq = typeof((*G217_tp)->U.V30.taparm);
   if ((tq == typnods.A[(int)(tinteger)]) || (tq->tt == nsubrange))
    (void)fprintf(output.fp, "abs("), Putl(output, 0);
   else
    (void)fprintf(output.fp, "fabs("), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   Putchr(')', output);
   break ;
    case dargv:
   (void)fprintf(output.fp, "Argvgt("), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   (void)fprintf(output.fp, ", "), Putl(output, 0);
-  eexpr(tp->U.V30.taparm->tnext);
+  eexpr((*G217_tp)->U.V30.taparm->tnext);
   (void)fprintf(output.fp, ".A, sizeof("), Putl(output, 0);
-  eexpr(tp->U.V30.taparm->tnext);
+  eexpr((*G217_tp)->U.V30.taparm->tnext);
   (void)fprintf(output.fp, ".A));\n"), Putl(output, 1);
   break ;
    case dchr:
-  tq = typeof(tp->U.V30.taparm);
+  tq = typeof((*G217_tp)->U.V30.taparm);
   if (tq->tt == nsubrange)
    if (tq->tup->tt == nconfarr)
     tq = typeof(tq->tup->U.V22.tindtyp);
    else
     tq = typeof(tq->U.V19.tlo);
   if ((tq == typnods.A[(int)(tinteger)]) || (tq == typnods.A[(int)(tchar)]))
-   eexpr(tp->U.V30.taparm);
+   eexpr((*G217_tp)->U.V30.taparm);
   else {
    (void)fprintf(output.fp, "(char)("), Putl(output, 0);
-   eexpr(tp->U.V30.taparm);
+   eexpr((*G217_tp)->U.V30.taparm);
    Putchr(')', output);
   }
   break ;
    case ddispose:
   (void)fprintf(output.fp, "free("), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   (void)fprintf(output.fp, ");\n"), Putl(output, 1);
   break ;
    case deof:
   (void)fprintf(output.fp, "Eof("), Putl(output, 0);
-  if (tp->U.V30.taparm == (struct S64 *)NIL) {
+  if ((*G217_tp)->U.V30.taparm == (struct S64 *)NIL) {
    defnams.A[(int)(dinput)]->U.V6.lused = true;
    printid(defnams.A[(int)(dinput)]->U.V6.lid);
   } else
-   eexpr(tp->U.V30.taparm);
+   eexpr((*G217_tp)->U.V30.taparm);
   Putchr(')', output);
   break ;
    case deoln:
   (void)fprintf(output.fp, "Eoln("), Putl(output, 0);
-  if (tp->U.V30.taparm == (struct S64 *)NIL) {
+  if ((*G217_tp)->U.V30.taparm == (struct S64 *)NIL) {
    defnams.A[(int)(dinput)]->U.V6.lused = true;
    printid(defnams.A[(int)(dinput)]->U.V6.lid);
   } else
-   eexpr(tp->U.V30.taparm);
+   eexpr((*G217_tp)->U.V30.taparm);
   Putchr(')', output);
   break ;
    case dexit:
   (void)fprintf(output.fp, "exit("), Putl(output, 0);
-  if (tp->U.V30.taparm == (struct S64 *)NIL)
+  if ((*G217_tp)->U.V30.taparm == (struct S64 *)NIL)
    Putchr('0', output);
   else
-   eexpr(tp->U.V30.taparm);
+   eexpr((*G217_tp)->U.V30.taparm);
   (void)fprintf(output.fp, ");\n"), Putl(output, 1);
   break ;
    case dflush:
   (void)fprintf(output.fp, "fflush("), Putl(output, 0);
-  if (tp->U.V30.taparm == (struct S64 *)NIL) {
+  if ((*G217_tp)->U.V30.taparm == (struct S64 *)NIL) {
    defnams.A[(int)(doutput)]->U.V6.lused = true;
    printid(defnams.A[(int)(doutput)]->U.V6.lid);
   } else
-   eexpr(tp->U.V30.taparm);
+   eexpr((*G217_tp)->U.V30.taparm);
   (void)fprintf(output.fp, ".fp);\n"), Putl(output, 1);
   break ;
    case dpage:
   (void)fprintf(output.fp, "Putchr(%s, ", ffchr), Putl(output, 0);
-  if (tp->U.V30.taparm == (struct S64 *)NIL) {
+  if ((*G217_tp)->U.V30.taparm == (struct S64 *)NIL) {
    defnams.A[(int)(doutput)]->U.V6.lused = true;
    printid(defnams.A[(int)(doutput)]->U.V6.lid);
   } else
-   eexpr(tp->U.V30.taparm);
+   eexpr((*G217_tp)->U.V30.taparm);
   (void)fprintf(output.fp, ");\n"), Putl(output, 1);
   break ;
    case dput:  case dget:
-  if (typeof(tp->U.V30.taparm) == typnods.A[(int)(ttext)])
-   if (td == dget)
+  if (typeof((*G217_tp)->U.V30.taparm) == typnods.A[(int)(ttext)])
+   if ((*G219_td) == dget)
     (void)fprintf(output.fp, "Getx"), Putl(output, 0);
    else
     (void)fprintf(output.fp, "Putx"), Putl(output, 0);
   else {
    (void)fprintf(output.fp, "%s", voidcast), Putl(output, 0);
-   if (td == dget)
+   if ((*G219_td) == dget)
     (void)fprintf(output.fp, "Get"), Putl(output, 0);
    else
     (void)fprintf(output.fp, "Put"), Putl(output, 0);
   }
   Putchr('(', output);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   (void)fprintf(output.fp, ");\n"), Putl(output, 1);
   break ;
    case dhalt:
   (void)fprintf(output.fp, "abort();\n"), Putl(output, 1);
   break ;
    case dnew:
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   (void)fprintf(output.fp, " = ("), Putl(output, 0);
-  etypedef(typeof(tp->U.V30.taparm));
+  etypedef(typeof((*G217_tp)->U.V30.taparm));
   (void)fprintf(output.fp, ")malloc((unsigned)("), Putl(output, 0);
-  enewsize(tp->U.V30.taparm);
+  enewsize((*G217_tp)->U.V30.taparm);
   (void)fprintf(output.fp, "));\n"), Putl(output, 1);
   break ;
    case dord:
   (void)fprintf(output.fp, "(unsigned)("), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   Putchr(')', output);
   break ;
    case dread:  case dreadln:
   txtfile = false;
-  tq = tp->U.V30.taparm;
+  tq = (*G217_tp)->U.V30.taparm;
   if (tq != (struct S64 *)NIL) {
    tv = typeof(tq);
    if (tv == typnods.A[(int)(ttext)]) {
@@ -6736,7 +6994,7 @@ epredef(ts, tp)
     else
      eexpr(tv);
     Putchr(')', output);
-    if (td == dreadln)
+    if ((*G219_td) == dreadln)
      Putchr(',', output);
     goto L444;
    }
@@ -6815,10 +7073,10 @@ epredef(ts, tp)
    else
     eexpr(tv);
    Putchr(')', output);
-   if (td == dreadln)
+   if ((*G219_td) == dreadln)
     Putchr(',', output);
   L444:
-   if (td == dreadln) {
+   if ((*G219_td) == dreadln) {
     usegetl = true;
     (void)fprintf(output.fp, "Getl(&"), Putl(output, 0);
     if (tv == (struct S64 *)NIL)
@@ -6847,7 +7105,7 @@ epredef(ts, tp)
   break ;
    case dwrite:  case dwriteln:  case dmessage:
   txtfile = false;
-  tq = tp->U.V30.taparm;
+  tq = (*G217_tp)->U.V30.taparm;
   if (tq != (struct S64 *)NIL) {
    tv = typeof(tq);
    if (tv == typnods.A[(int)(ttext)]) {
@@ -6869,7 +7127,7 @@ epredef(ts, tp)
   }
   if (txtfile) {
    if (tq == (struct S64 *)NIL) {
-    if (Member((unsigned)(td), Conset[160])) {
+    if (Member((unsigned)((*G219_td)), Conset[167])) {
      (void)fprintf(output.fp, "Putchr(%s, ", nlchr), Putl(output, 0);
      if (tv == (struct S64 *)NIL)
       printid(defnams.A[(int)(doutput)]->U.V6.lid);
@@ -6890,7 +7148,7 @@ epredef(ts, tp)
       else
        eexpr(tv);
       Putchr(')', output);
-      if (td == dwriteln) {
+      if ((*G219_td) == dwriteln) {
        (void)fprintf(output.fp, ",Putchr(%s, ", nlchr), Putl(output, 0);
        if (tv == (struct S64 *)NIL)
         printid(defnams.A[(int)(doutput)]->U.V6.lid);
@@ -6903,7 +7161,7 @@ epredef(ts, tp)
      }
    tx = (struct S64 *)NIL;
    (void)fprintf(output.fp, "%sfprintf(", voidcast), Putl(output, 0);
-   if (td == dmessage)
+   if ((*G219_td) == dmessage)
     (void)fprintf(output.fp, "stderr, "), Putl(output, 0);
    else {
     if (tv == (struct S64 *)NIL)
@@ -6918,7 +7176,7 @@ epredef(ts, tp)
     eformat(tq);
     tq = tq->tnext;
    }
-   if ((td == dmessage) || (td == dwriteln))
+   if (((*G219_td) == dmessage) || ((*G219_td) == dwriteln))
     (void)fprintf(output.fp, "\\n"), Putl(output, 0);
    Putchr(cite, output);
    tq = tx;
@@ -6931,7 +7189,7 @@ epredef(ts, tp)
     printid(defnams.A[(int)(doutput)]->U.V6.lid);
    else
     eexpr(tv);
-   if (td == dwrite)
+   if ((*G219_td) == dwrite)
     (void)fprintf(output.fp, ", 0)"), Putl(output, 0);
    else
     (void)fprintf(output.fp, ", 1)"), Putl(output, 0);
@@ -6946,7 +7204,7 @@ epredef(ts, tp)
     else
      fatal(etree);
    while (tq != (struct S64 *)NIL) {
-    if ((Member((unsigned)(tq->tt), Conset[161])) && (tx == typeof(tq))) {
+    if ((Member((unsigned)(tq->tt), Conset[168])) && (tx == typeof(tq))) {
      (void)fprintf(output.fp, "%sFwrite(", voidcast), Putl(output, 0);
      eexpr(tq);
     } else {
@@ -6956,7 +7214,7 @@ epredef(ts, tp)
       eselect(tv);
       (void)fprintf(output.fp, "buf.S, "), Putl(output, 0);
       eexpr(tq);
-      if (typeof(tp->U.V27.trhs) == typnods.A[(int)(tset)])
+      if (typeof((*G217_tp)->U.V27.trhs) == typnods.A[(int)(tset)])
        eexpr(tq);
       else {
        eselect(tq);
@@ -6990,7 +7248,7 @@ epredef(ts, tp)
   ;
   break ;
    case dclose:
-  tq = typeof(tp->U.V30.taparm);
+  tq = typeof((*G217_tp)->U.V30.taparm);
   txtfile = (boolean)(tq == typnods.A[(int)(ttext)]);
   if ((!txtfile) && (tq->tt == nfileof))
    if (typeof(tq->U.V18.tof) == typnods.A[(int)(tchar)])
@@ -6999,47 +7257,47 @@ epredef(ts, tp)
    (void)fprintf(output.fp, "Closex("), Putl(output, 0);
   else
    (void)fprintf(output.fp, "Close("), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   (void)fprintf(output.fp, ");\n"), Putl(output, 1);
   break ;
    case dreset:  case drewrite:
-  tq = typeof(tp->U.V30.taparm);
+  tq = typeof((*G217_tp)->U.V30.taparm);
   txtfile = (boolean)(tq == typnods.A[(int)(ttext)]);
   if ((!txtfile) && (tq->tt == nfileof))
    if (typeof(tq->U.V18.tof) == typnods.A[(int)(tchar)])
     txtfile = true;
   if (txtfile)
-   if (td == dreset)
+   if ((*G219_td) == dreset)
     (void)fprintf(output.fp, "Resetx("), Putl(output, 0);
    else
     (void)fprintf(output.fp, "Rewritex("), Putl(output, 0);
   else
-   if (td == dreset)
+   if ((*G219_td) == dreset)
     (void)fprintf(output.fp, "Reset("), Putl(output, 0);
    else
     (void)fprintf(output.fp, "Rewrite("), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   (void)fprintf(output.fp, ", "), Putl(output, 0);
-  tq = tp->U.V30.taparm->tnext;
+  tq = (*G217_tp)->U.V30.taparm->tnext;
   if (tq == (struct S64 *)NIL)
    (void)fprintf(output.fp, "NULL, 0"), Putl(output, 0);
   else {
    tq = typeof(tq);
    if (tq == typnods.A[(int)(tchar)]) {
     Putchr(cite, output);
-    ch = cvalof(tp->U.V30.taparm->tnext);
+    ch = cvalof((*G217_tp)->U.V30.taparm->tnext);
     if ((ch == bslash) || (ch == cite))
      Putchr(bslash, output);
     (void)fprintf(output.fp, "%c%c, -1", ch, cite), Putl(output, 0);
    } else
     if (tq == typnods.A[(int)(tstring)]) {
-     eexpr(tp->U.V30.taparm->tnext);
+     eexpr((*G217_tp)->U.V30.taparm->tnext);
      (void)fprintf(output.fp, ", -1"), Putl(output, 0);
     } else
      if (tq->tt == narray) {
-      eexpr(tp->U.V30.taparm->tnext);
+      eexpr((*G217_tp)->U.V30.taparm->tnext);
       (void)fprintf(output.fp, ".A, sizeof("), Putl(output, 0);
-      eexpr(tp->U.V30.taparm->tnext);
+      eexpr((*G217_tp)->U.V30.taparm->tnext);
       (void)fprintf(output.fp, ".A)"), Putl(output, 0);
      } else
       fatal(etree);
@@ -7048,42 +7306,42 @@ epredef(ts, tp)
   break ;
    case darctan:
   (void)fprintf(output.fp, "atan("), Putl(output, 0);
-  if (typeof(tp->U.V30.taparm) != typnods.A[(int)(treal)])
+  if (typeof((*G217_tp)->U.V30.taparm) != typnods.A[(int)(treal)])
    (void)fprintf(output.fp, "%s", dblcast), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   Putchr(')', output);
   break ;
    case dln:
   (void)fprintf(output.fp, "log("), Putl(output, 0);
-  if (typeof(tp->U.V30.taparm) != typnods.A[(int)(treal)])
+  if (typeof((*G217_tp)->U.V30.taparm) != typnods.A[(int)(treal)])
    (void)fprintf(output.fp, "%s", dblcast), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   Putchr(')', output);
   break ;
    case dexp:
   (void)fprintf(output.fp, "exp("), Putl(output, 0);
-  if (typeof(tp->U.V30.taparm) != typnods.A[(int)(treal)])
+  if (typeof((*G217_tp)->U.V30.taparm) != typnods.A[(int)(treal)])
    (void)fprintf(output.fp, "%s", dblcast), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   Putchr(')', output);
   break ;
    case dcos:  case dsin:  case dsqrt:
-  eexpr(tp->U.V30.tcall);
+  eexpr((*G217_tp)->U.V30.tcall);
   Putchr('(', output);
-  if (typeof(tp->U.V30.taparm) != typnods.A[(int)(treal)])
+  if (typeof((*G217_tp)->U.V30.taparm) != typnods.A[(int)(treal)])
    (void)fprintf(output.fp, "%s", dblcast), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   Putchr(')', output);
   break ;
    case dtan:
   (void)fprintf(output.fp, "atan("), Putl(output, 0);
-  if (typeof(tp->U.V30.taparm) != typnods.A[(int)(treal)])
+  if (typeof((*G217_tp)->U.V30.taparm) != typnods.A[(int)(treal)])
    (void)fprintf(output.fp, "%s", dblcast), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   Putchr(')', output);
   break ;
    case dsucc:  case dpred:
-  tq = typeof(tp->U.V30.taparm);
+  tq = typeof((*G217_tp)->U.V30.taparm);
   if (tq->tt == nsubrange)
    if (tq->tup->tt == nconfarr)
     tq = typeof(tq->tup->U.V22.tindtyp);
@@ -7091,8 +7349,8 @@ epredef(ts, tp)
     tq = typeof(tq->U.V19.tlo);
   if ((tq == typnods.A[(int)(tinteger)]) || (tq == typnods.A[(int)(tchar)])) {
    (void)fprintf(output.fp, "(("), Putl(output, 0);
-   eexpr(tp->U.V30.taparm);
-   if (td == dpred)
+   eexpr((*G217_tp)->U.V30.taparm);
+   if ((*G219_td) == dpred)
     (void)fprintf(output.fp, ")-1)"), Putl(output, 0);
    else
     (void)fprintf(output.fp, ")+1)"), Putl(output, 0);
@@ -7105,8 +7363,8 @@ epredef(ts, tp)
     Putchr(')', output);
    }
    (void)fprintf(output.fp, "((int)("), Putl(output, 0);
-   eexpr(tp->U.V30.taparm);
-   if (td == dpred)
+   eexpr((*G217_tp)->U.V30.taparm);
+   if ((*G219_td) == dpred)
     (void)fprintf(output.fp, ")-1))"), Putl(output, 0);
    else
     (void)fprintf(output.fp, ")+1))"), Putl(output, 0);
@@ -7116,42 +7374,42 @@ epredef(ts, tp)
   Putchr('(', output);
   printid(defnams.A[(int)(dboolean)]->U.V6.lid);
   (void)fprintf(output.fp, ")(("), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   (void)fprintf(output.fp, ") & 1)"), Putl(output, 0);
   break ;
    case dsqr:
-  tq = typeof(tp->U.V30.taparm);
+  tq = typeof((*G217_tp)->U.V30.taparm);
   if ((tq == typnods.A[(int)(tinteger)]) || (tq->tt == nsubrange)) {
    (void)fprintf(output.fp, "(("), Putl(output, 0);
-   eexpr(tp->U.V30.taparm);
+   eexpr((*G217_tp)->U.V30.taparm);
    (void)fprintf(output.fp, ") * ("), Putl(output, 0);
-   eexpr(tp->U.V30.taparm);
+   eexpr((*G217_tp)->U.V30.taparm);
    (void)fprintf(output.fp, "))"), Putl(output, 0);
   } else {
    (void)fprintf(output.fp, "pow("), Putl(output, 0);
-   if (typeof(tp->U.V30.taparm) != typnods.A[(int)(treal)])
+   if (typeof((*G217_tp)->U.V30.taparm) != typnods.A[(int)(treal)])
     (void)fprintf(output.fp, "%s", dblcast), Putl(output, 0);
-   eexpr(tp->U.V30.taparm);
+   eexpr((*G217_tp)->U.V30.taparm);
    (void)fprintf(output.fp, ", 2.0)"), Putl(output, 0);
   }
   break ;
    case dround:
   (void)fprintf(output.fp, "Round("), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   Putchr(')', output);
   break ;
    case dtrunc:
   (void)fprintf(output.fp, "Trunc("), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
+  eexpr((*G217_tp)->U.V30.taparm);
   Putchr(')', output);
   break ;
    case dpack:
-  tq = typeof(tp->U.V30.taparm);
-  tx = typeof(tp->U.V30.taparm->tnext->tnext);
+  tq = typeof((*G217_tp)->U.V30.taparm);
+  tx = typeof((*G217_tp)->U.V30.taparm->tnext->tnext);
   (void)fprintf(output.fp, "{    %s%s%c_j, _i = ", registr, inttyp, tab1), Putl(output, 0);
-  if (!arithexpr(tp->U.V30.taparm->tnext))
+  if (!arithexpr((*G217_tp)->U.V30.taparm->tnext))
    (void)fprintf(output.fp, "(int)"), Putl(output, 0);
-  eexpr(tp->U.V30.taparm->tnext);
+  eexpr((*G217_tp)->U.V30.taparm->tnext);
   if (tx->tt == narray)
    (void)fprintf(output.fp, " - %1d", clower(tq->U.V23.taindx)), Putl(output, 0);
   Putchr(';', output),Putchr('\n', output);
@@ -7166,20 +7424,24 @@ epredef(ts, tp)
   (void)fprintf(output.fp, "; )\n"), Putl(output, 1);
   indent();
   Putchr(tab1, output);
-  eexpr(tp->U.V30.taparm->tnext->tnext);
-  (void)fprintf(output.fp, ".A[_j++] = "), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
-  (void)fprintf(output.fp, ".A[_i++];\n"), Putl(output, 1);
+  eexpr((*G217_tp)->U.V30.taparm->tnext->tnext);
+  if (typeof((*G217_tp)->U.V30.taparm->tnext->tnext)->tt == narray)
+   (void)fprintf(output.fp, ".A"), Putl(output, 0);
+  (void)fprintf(output.fp, "[_j++] = "), Putl(output, 0);
+  eexpr((*G217_tp)->U.V30.taparm);
+  if (tq->tt == narray)
+   (void)fprintf(output.fp, ".A"), Putl(output, 0);
+  (void)fprintf(output.fp, "[_i++];\n"), Putl(output, 1);
   indent();
   Putchr('}', output),Putchr('\n', output);
   break ;
    case dunpack:
-  tq = typeof(tp->U.V30.taparm);
-  tx = typeof(tp->U.V30.taparm->tnext);
+  tq = typeof((*G217_tp)->U.V30.taparm);
+  tx = typeof((*G217_tp)->U.V30.taparm->tnext);
   (void)fprintf(output.fp, "{   %s%s%c_j, _i = ", registr, inttyp, tab1), Putl(output, 0);
-  if (!arithexpr(tp->U.V30.taparm->tnext->tnext))
+  if (!arithexpr((*G217_tp)->U.V30.taparm->tnext->tnext))
    (void)fprintf(output.fp, "(int)"), Putl(output, 0);
-  eexpr(tp->U.V30.taparm->tnext->tnext);
+  eexpr((*G217_tp)->U.V30.taparm->tnext->tnext);
   if (tx->tt != nconfarr)
    (void)fprintf(output.fp, " - %1d", clower(tx->U.V23.taindx)), Putl(output, 0);
   Putchr(';', output),Putchr('\n', output);
@@ -7194,17 +7456,25 @@ epredef(ts, tp)
   (void)fprintf(output.fp, "; )\n"), Putl(output, 1);
   indent();
   Putchr(tab1, output);
-  eexpr(tp->U.V30.taparm->tnext);
-  (void)fprintf(output.fp, ".A[_i++] = "), Putl(output, 0);
-  eexpr(tp->U.V30.taparm);
-  (void)fprintf(output.fp, ".A[_j++];\n"), Putl(output, 1);
+  eexpr((*G217_tp)->U.V30.taparm->tnext);
+  if (tx->tt == narray)
+   (void)fprintf(output.fp, ".A"), Putl(output, 0);
+  (void)fprintf(output.fp, "[_i++] = "), Putl(output, 0);
+  eexpr((*G217_tp)->U.V30.taparm);
+  if (tq->tt == narray)
+   (void)fprintf(output.fp, ".A"), Putl(output, 0);
+  (void)fprintf(output.fp, "[_j++];\n"), Putl(output, 1);
   indent();
   Putchr('}', output),Putchr('\n', output);
   break ;
    default:
   Caseerror(Line);
  }
- G217_nelems = F218;
+L999:
+ ;
+ G217_tp = F218;
+ G219_td = F220;
+ G221_nelems = F222;
 }
 
  void
@@ -7212,7 +7482,7 @@ eaddr(tp)
  treeptr tp;
 {
  Putchr('&', output);
- if (!(Member((unsigned)(tp->tt), Conset[162])))
+ if (!(Member((unsigned)(tp->tt), Conset[169])))
   error(evarpar);
  eexpr(tp);
 }
@@ -7250,7 +7520,7 @@ ecall(tp)
  Putchr('(', output);
  tq = tp->U.V30.taparm;
  while (tq != (struct S64 *)NIL) {
-  if (Member((unsigned)(tf->tup->tt), Conset[163])) {
+  if (Member((unsigned)(tf->tup->tt), Conset[170])) {
    if (tq->tt == ncall)
     printid(tq->U.V30.tcall->U.V43.tsym->U.V6.lid);
    else
@@ -7261,7 +7531,7 @@ ecall(tp)
     tx = tq;
     while (tx->tt == nuplus)
      tx = tx->U.V42.texps;
-    if (Member((unsigned)(tx->tt), Conset[164])) {
+    if (Member((unsigned)(tx->tt), Conset[171])) {
      Putchr('(', output);
      printid(defnams.A[(int)(dboolean)]->U.V6.lid);
      (void)fprintf(output.fp, ")("), Putl(output, 0);
@@ -7277,7 +7547,7 @@ ecall(tp)
      (void)fprintf(output.fp, "*(("), Putl(output, 0);
      etypedef(tf->tup->U.V14.tbind);
      (void)fprintf(output.fp, " *)"), Putl(output, 0);
-     (*G224_dropset) = true;
+     (*G228_dropset) = true;
      if (align) {
       usesal = true;
       (void)fprintf(output.fp, "SETALIGN("), Putl(output, 0);
@@ -7285,7 +7555,7 @@ ecall(tp)
       Putchr(')', output);
      } else
       eexpr(tq);
-     (*G224_dropset) = false;
+     (*G228_dropset) = false;
      Putchr(')', output);
     } else
      if (tx == typnods.A[(int)(tstring)]) {
@@ -7307,22 +7577,33 @@ ecall(tp)
        (void)fprintf(output.fp, ")NIL"), Putl(output, 0);
       } else
        if (tf->tup->U.V14.tbind->tt == nconfarr) {
-        (void)fprintf(output.fp, "(struct "), Putl(output, 0);
-        printid(tf->tup->U.V14.tbind->U.V22.tcuid);
-        (void)fprintf(output.fp, " *)&"), Putl(output, 0);
         eexpr(tq);
-        if (tq->tnext == (struct S64 *)NIL) {
-         (void)fprintf(output.fp, ", ("), Putl(output, 0);
-         eexpr(tx->U.V23.taindx->U.V19.thi);
-         (void)fprintf(output.fp, " - "), Putl(output, 0);
-         eexpr(tx->U.V23.taindx->U.V19.tlo);
-         (void)fprintf(output.fp, " + 1)"), Putl(output, 0);
+        if (tx->tt == narray)
+         (void)fprintf(output.fp, ".A"), Putl(output, 0);
+        if (tf->tnext == (struct S64 *)NIL) {
+         (void)fprintf(output.fp, ", "), Putl(output, 0);
+         if (tx->tt == nconfarr)
+          printid(tx->U.V22.tcindx->U.V19.thi->U.V43.tsym->U.V6.lid);
+         else {
+          Putchr('(', output);
+          eexpr(tx->U.V23.taindx->U.V19.thi);
+          (void)fprintf(output.fp, " - "), Putl(output, 0);
+          eexpr(tx->U.V23.taindx->U.V19.tlo);
+          (void)fprintf(output.fp, " + 1)"), Putl(output, 0);
+         }
         }
        } else {
         if (tf->tup->tt == nvarpar)
          eaddr(tq);
         else
-         eexpr(tq);
+         if (target16 && ((typeof(tf) == typnods.A[(int)(tinteger)]) || (typeof(tf)->tt == nsubrange))) {
+          Putchr('(', output);
+          etypedef(tf->tup->U.V14.tbind);
+          (void)fprintf(output.fp, ")("), Putl(output, 0);
+          eexpr(tq);
+          Putchr(')', output);
+         } else
+          eexpr(tq);
        }
   }
   tq = tq->tnext;
@@ -7410,23 +7691,23 @@ eexpr(tp)
  treeptr tq;
  boolean flag;
 
- (*G228_donearr) = false;
- if (Member((unsigned)(tp->tt), Conset[165])) {
+ (*G232_donearr) = false;
+ if (Member((unsigned)(tp->tt), Conset[172])) {
   tq = typeof(tp->U.V41.texpl);
-  if ((Member((unsigned)(tq->tt), Conset[166])) || (tq == typnods.A[(int)(tset)])) {
+  if ((Member((unsigned)(tq->tt), Conset[173])) || (tq == typnods.A[(int)(tset)])) {
    switch ((int)(tp->tt)) {
      case nplus:
-    (*G222_setused) = true;
+    (*G226_setused) = true;
     useunion = true;
     (void)fprintf(output.fp, "Union"), Putl(output, 0);
     break ;
      case nminus:
-    (*G222_setused) = true;
+    (*G226_setused) = true;
     usediff = true;
     (void)fprintf(output.fp, "Diff"), Putl(output, 0);
     break ;
      case nmul:
-    (*G222_setused) = true;
+    (*G226_setused) = true;
     useintr = true;
     (void)fprintf(output.fp, "Inter"), Putl(output, 0);
     break ;
@@ -7449,8 +7730,8 @@ eexpr(tp)
      default:
     Caseerror(Line);
    }
-   if (Member((unsigned)(tp->tt), Conset[167]))
-    (*G224_dropset) = false;
+   if (Member((unsigned)(tp->tt), Conset[174]))
+    (*G228_dropset) = false;
    Putchr('(', output);
    eexpr(tp->U.V41.texpl);
    if (tq->tt == nsetof)
@@ -7464,11 +7745,11 @@ eexpr(tp)
    goto L999;
   }
  }
- if (Member((unsigned)(tp->tt), Conset[168])) {
+ if (Member((unsigned)(tp->tt), Conset[175])) {
   tq = typeof(tp->U.V41.texpl);
   if (tq->tt == nconfarr)
    fatal(ecmpconf);
-  if ((Member((unsigned)(tq->tt), Conset[169])) || (tq == typnods.A[(int)(tstring)])) {
+  if ((Member((unsigned)(tq->tt), Conset[176])) || (tq == typnods.A[(int)(tstring)])) {
    (void)fprintf(output.fp, "Cmpstr("), Putl(output, 0);
    eexpr(tp->U.V41.texpl);
    if (tq->tt == narray)
@@ -7513,7 +7794,7 @@ eexpr(tp)
    case nplus:  case nminus:  case nmul:  case ndiv:
    case nmod:  case nquot:
   flag = (boolean)(cprio.A[(int)(tp->tt) - (int)(nassign)] > cprio.A[(int)(tp->U.V41.texpl->tt) - (int)(nassign)]);
-  if ((Member((unsigned)(tp->tt), Conset[170])) && !arithexpr(tp->U.V41.texpl)) {
+  if ((Member((unsigned)(tp->tt), Conset[177])) && !arithexpr(tp->U.V41.texpl)) {
    (void)fprintf(output.fp, "(int)"), Putl(output, 0);
    flag = true;
   }
@@ -7571,7 +7852,7 @@ eexpr(tp)
    Caseerror(Line);
   }
   flag = (boolean)(cprio.A[(int)(tp->tt) - (int)(nassign)] > cprio.A[(int)(tp->U.V41.texpr->tt) - (int)(nassign)]);
-  if ((Member((unsigned)(tp->tt), Conset[171])) && !arithexpr(tp->U.V41.texpr)) {
+  if ((Member((unsigned)(tp->tt), Conset[178])) && !arithexpr(tp->U.V41.texpr)) {
    (void)fprintf(output.fp, "(int)"), Putl(output, 0);
    flag = true;
   }
@@ -7608,9 +7889,9 @@ eexpr(tp)
   (void)fprintf(output.fp, "Member((unsigned)("), Putl(output, 0);
   eexpr(tp->U.V41.texpl);
   (void)fprintf(output.fp, "), "), Putl(output, 0);
-  (*G224_dropset) = true;
+  (*G228_dropset) = true;
   eexpr(tp->U.V41.texpr);
-  (*G224_dropset) = false;
+  (*G228_dropset) = false;
   tq = typeof(tp->U.V41.texpr);
   if (tq->tt == nsetof)
    (void)fprintf(output.fp, ".S"), Putl(output, 0);
@@ -7619,7 +7900,10 @@ eexpr(tp)
    case nassign:
   tq = typeof(tp->U.V27.trhs);
   if (tq == typnods.A[(int)(tstring)]) {
-   (void)fprintf(output.fp, "%sstrncpy(", voidcast), Putl(output, 0);
+   if (minimal)
+    (void)fprintf(output.fp, "PtcCopy("), Putl(output, 0);
+   else
+    (void)fprintf(output.fp, "%sstrncpy(", voidcast), Putl(output, 0);
    eexpr(tp->U.V27.tlhs);
    (void)fprintf(output.fp, ".A, "), Putl(output, 0);
    eexpr(tp->U.V27.trhs);
@@ -7633,7 +7917,7 @@ eexpr(tp)
     tq = tp->U.V27.trhs;
     while (tq->tt == nuplus)
      tq = tq->U.V42.texps;
-    if (Member((unsigned)(tq->tt), Conset[172])) {
+    if (Member((unsigned)(tq->tt), Conset[179])) {
      Putchr('(', output);
      printid(defnams.A[(int)(dboolean)]->U.V6.lid);
      (void)fprintf(output.fp, ")("), Putl(output, 0);
@@ -7654,7 +7938,7 @@ eexpr(tp)
       (void)fprintf(output.fp, "Setncpy("), Putl(output, 0);
       eselect(tp->U.V27.tlhs);
       (void)fprintf(output.fp, "S, "), Putl(output, 0);
-      (*G224_dropset) = true;
+      (*G228_dropset) = true;
       tq = typeof(tp->U.V27.trhs);
       if (tq == typnods.A[(int)(tset)])
        eexpr(tp->U.V27.trhs);
@@ -7662,7 +7946,7 @@ eexpr(tp)
        eselect(tp->U.V27.trhs);
        Putchr('S', output);
       }
-      (*G224_dropset) = false;
+      (*G228_dropset) = false;
       (void)fprintf(output.fp, ", sizeof("), Putl(output, 0);
       eselect(tp->U.V27.tlhs);
       (void)fprintf(output.fp, "S))"), Putl(output, 0);
@@ -7675,7 +7959,7 @@ eexpr(tp)
   break ;
    case ncall:
   tq = idup(tp->U.V30.tcall);
-  if ((Member((unsigned)(tq->tt), Conset[173])) && (tq->U.V13.tsubstmt != (struct S64 *)NIL))
+  if ((Member((unsigned)(tq->tt), Conset[180])) && (tq->U.V13.tsubstmt != (struct S64 *)NIL))
    if (tq->U.V13.tsubstmt->tt == npredef)
     epredef(tq, tp);
    else
@@ -7688,9 +7972,14 @@ eexpr(tp)
   eexpr(tp->U.V40.tfield);
   break ;
    case nindex:
-  eselect(tp->U.V39.tvariable);
-  (void)fprintf(output.fp, "A["), Putl(output, 0);
   tq = typeof(tp->U.V39.tvariable);
+  if (tq->tt == nconfarr) {
+   eexpr(tp->U.V39.tvariable);
+   Putchr('[', output);
+  } else {
+   eselect(tp->U.V39.tvariable);
+   (void)fprintf(output.fp, "A["), Putl(output, 0);
+  }
   if (runtimechecks && (tq->tt == narray)) {
    (void)fprintf(output.fp, "Chkidx("), Putl(output, 0);
    if (arithexpr(tp->U.V39.toffset))
@@ -7748,50 +8037,58 @@ eexpr(tp)
    eexpr(tp->U.V42.texps);
    (void)fprintf(output.fp, ".buf"), Putl(output, 0);
   } else
-   if ((*G226_doarrow)) {
-    (*G226_doarrow) = false;
-    if (runtimechecks)
-     (void)fprintf(output.fp, "Chknil("), Putl(output, 0);
-    eexpr(tp->U.V42.texps);
-    if (runtimechecks)
-     Putchr(')', output);
-    (void)fprintf(output.fp, "->"), Putl(output, 0);
-    (*G228_donearr) = true;
-   } else {
-    if (runtimechecks)
-     (void)fprintf(output.fp, "(*Chknil("), Putl(output, 0);
-    else
-     (void)fprintf(output.fp, "(*"), Putl(output, 0);
+   if ((*G230_doarrow)) {
+    (*G230_doarrow) = false;
+    if (runtimechecks) {
+     (void)fprintf(output.fp, "(("), Putl(output, 0);
+     etypedef(tq);
+     (void)fprintf(output.fp, ")Chknil("), Putl(output, 0);
+    }
     eexpr(tp->U.V42.texps);
     if (runtimechecks)
      (void)fprintf(output.fp, "))"), Putl(output, 0);
+    (void)fprintf(output.fp, "->"), Putl(output, 0);
+    (*G232_donearr) = true;
+   } else {
+    if (runtimechecks) {
+     (void)fprintf(output.fp, "(*(("), Putl(output, 0);
+     etypedef(tq);
+     (void)fprintf(output.fp, ")Chknil("), Putl(output, 0);
+    } else
+     (void)fprintf(output.fp, "(*"), Putl(output, 0);
+    eexpr(tp->U.V42.texps);
+    if (runtimechecks)
+     (void)fprintf(output.fp, ")))"), Putl(output, 0);
     else
      Putchr(')', output);
    }
   break ;
    case nid:
   tq = idup(tp);
-  if (tq->tt == nvarpar)
-   if ((*G226_doarrow)) {
-    (*G226_doarrow) = false;
-    printid(tp->U.V43.tsym->U.V6.lid);
-    (void)fprintf(output.fp, "->"), Putl(output, 0);
-    (*G228_donearr) = true;
-   } else {
-    (void)fprintf(output.fp, "(*"), Putl(output, 0);
-    printid(tp->U.V43.tsym->U.V6.lid);
-    Putchr(')', output);
-   }
+  if ((tq->tt == nvarpar) && (typeof(tp)->tt == nconfarr))
+   printid(tp->U.V43.tsym->U.V6.lid);
   else
-   if ((tq->tt == nconst) && (*G220_conflag))
-    (void)fprintf(output.fp, "%1d", cvalof(tp)), Putl(output, 0);
-   else
-    if (Member((unsigned)(tq->tt), Conset[174])) {
+   if (tq->tt == nvarpar)
+    if ((*G230_doarrow)) {
+     (*G230_doarrow) = false;
+     printid(tp->U.V43.tsym->U.V6.lid);
+     (void)fprintf(output.fp, "->"), Putl(output, 0);
+     (*G232_donearr) = true;
+    } else {
      (void)fprintf(output.fp, "(*"), Putl(output, 0);
      printid(tp->U.V43.tsym->U.V6.lid);
      Putchr(')', output);
-    } else
-     printid(tp->U.V43.tsym->U.V6.lid);
+    }
+   else
+    if ((tq->tt == nconst) && (*G224_conflag))
+     (void)fprintf(output.fp, "%1d", cvalof(tp)), Putl(output, 0);
+    else
+     if (Member((unsigned)(tq->tt), Conset[181])) {
+      (void)fprintf(output.fp, "(*"), Putl(output, 0);
+      printid(tp->U.V43.tsym->U.V6.lid);
+      Putchr(')', output);
+     } else
+      printid(tp->U.V43.tsym->U.V6.lid);
   break ;
    case nchar:
   printchr(tp->U.V43.tsym->U.V11.lchar);
@@ -7815,9 +8112,9 @@ eexpr(tp)
    tq->U.V42.texps = tp->U.V42.texps;
   } else {
    increment();
-   flag = (*G224_dropset);
-   if ((*G224_dropset))
-    (*G224_dropset) = false;
+   flag = (*G228_dropset);
+   if ((*G228_dropset))
+    (*G228_dropset) = false;
    else
     (void)fprintf(output.fp, "Saveset("), Putl(output, 0);
    (void)fprintf(output.fp, "(Tmpset = Newset(), "), Putl(output, 0);
@@ -7859,7 +8156,7 @@ eexpr(tp)
    (void)fprintf(output.fp, ", Tmpset)"), Putl(output, 0);
    if (!flag) {
     Putchr(')', output);
-    (*G222_setused) = true;
+    (*G226_setused) = true;
    }
    decrement();
   }
@@ -7868,8 +8165,8 @@ eexpr(tp)
   tq = tp;
   do {
    tq = tq->tup;
-  } while (!(Member((unsigned)(tq->tt), Conset[175])));
-  if (Member((unsigned)(tq->tt), Conset[176])) {
+  } while (!(Member((unsigned)(tq->tt), Conset[182])));
+  if (Member((unsigned)(tq->tt), Conset[183])) {
    if (typeof(tq->U.V41.texpl) == typnods.A[(int)(tnil)])
     tq = typeof(tq->U.V41.texpr);
    else
@@ -7954,7 +8251,7 @@ etrange(tp)
   if (B51 <= B52)
    for (i = B51; ; i++) {
     {
-     register struct S219 *W53 = &machdefs.A[i - 1];
+     register struct S223 *W53 = &machdefs.A[i - 1];
 
      if ((lo >= W53->lolim) && (hi <= W53->hilim)) {
       printtok(W53->typstr);
@@ -8121,11 +8418,7 @@ etdef(uid, tp)
    Putchr('}', output);
   break ;
    case nconfarr:
-  (void)fprintf(output.fp, "struct "), Putl(output, 0);
-  printid(tp->U.V22.tcuid);
-  (void)fprintf(output.fp, " { "), Putl(output, 0);
   etdef((idptr)NIL, tp->U.V22.tcelem);
-  (void)fprintf(output.fp, "%cA[]; }", tab1), Putl(output, 0);
   break ;
    case narray:
   (void)fprintf(output.fp, "struct { "), Putl(output, 0);
@@ -8332,9 +8625,9 @@ echoise(tp)
   indent();
   while (tq != (struct S64 *)NIL) {
    (void)fprintf(output.fp, "  case "), Putl(output, 0);
-   (*G220_conflag) = true;
+   (*G224_conflag) = true;
    eexpr(tq);
-   (*G220_conflag) = false;
+   (*G224_conflag) = false;
    Putchr(':', output);
    i = i + 1;
    tq = tq->tnext;
@@ -8426,7 +8719,7 @@ estmt(tp)
  while (tp != (struct S64 *)NIL) {
   switch ((int)(tp->tt)) {
     case nbegin:
-   if (Member((unsigned)(tp->tup->tt), Conset[177]))
+   if (Member((unsigned)(tp->tup->tt), Conset[184]))
     indent();
    Putchr('{', output),Putchr('\n', output);
    increment();
@@ -8453,7 +8746,7 @@ estmt(tp)
    (void)fprintf(output.fp, "while ("), Putl(output, 0);
    increment();
    eexpr(tp->U.V32.twhixp);
-   stusd = (*G222_setused);
+   stusd = (*G226_setused);
    if (tp->U.V32.twhistmt->tt == nbegin) {
     decrement();
     (void)fprintf(output.fp, ") "), Putl(output, 0);
@@ -8463,7 +8756,7 @@ estmt(tp)
     estmt(tp->U.V32.twhistmt);
     decrement();
    }
-   (*G222_setused) = (boolean)(stusd || (*G222_setused));
+   (*G226_setused) = (boolean)(stusd || (*G226_setused));
    break ;
     case nfor:
    indent();
@@ -8587,8 +8880,8 @@ estmt(tp)
    (void)fprintf(output.fp, "if ("), Putl(output, 0);
    increment();
    eexpr(tp->U.V31.tifxp);
-   stusd = (*G222_setused);
-   (*G222_setused) = false;
+   stusd = (*G226_setused);
+   (*G226_setused) = false;
    if (tp->U.V31.tthen->tt == nbegin) {
     decrement();
     (void)fprintf(output.fp, ") "), Putl(output, 0);
@@ -8617,7 +8910,7 @@ estmt(tp)
      decrement();
     }
    }
-   (*G222_setused) = (boolean)(stusd || (*G222_setused));
+   (*G226_setused) = (boolean)(stusd || (*G226_setused));
    break ;
     case ncase:
    indent();
@@ -8690,7 +8983,7 @@ estmt(tp)
     case ncall:
    indent();
    tq = idup(tp->U.V30.tcall);
-   if ((Member((unsigned)(tq->tt), Conset[178])) && (tq->U.V13.tsubstmt != (struct S64 *)NIL))
+   if ((Member((unsigned)(tq->tt), Conset[185])) && (tq->U.V13.tsubstmt != (struct S64 *)NIL))
     if (tq->U.V13.tsubstmt->tt == npredef)
      epredef(tq, tp);
     else {
@@ -8713,7 +9006,7 @@ estmt(tp)
    (void)fprintf(output.fp, " = "), Putl(output, 0);
    if (tp->U.V28.tloc->tt == nid) {
     tq = idup(tp->U.V28.tloc);
-    if (Member((unsigned)(tq->tt), Conset[179]))
+    if (Member((unsigned)(tq->tt), Conset[186]))
      printid(tp->U.V28.tloc->U.V43.tsym->U.V6.lid);
     else
      eaddr(tp->U.V28.tloc);
@@ -8737,7 +9030,7 @@ estmt(tp)
    (void)fprintf(output.fp, ") break;\n"), Putl(output, 1);
    break ;
     case nempty:
-   if (!(Member((unsigned)(tp->tup->tt), Conset[180]))) {
+   if (!(Member((unsigned)(tp->tup->tt), Conset[187]))) {
     indent();
     Putchr(';', output),Putchr('\n', output);
    }
@@ -8745,10 +9038,10 @@ estmt(tp)
     default:
    Caseerror(Line);
   }
-  if ((*G222_setused) && (Member((unsigned)(tp->tup->tt), Conset[181]))) {
+  if ((*G226_setused) && (Member((unsigned)(tp->tup->tt), Conset[188]))) {
    indent();
    (void)fprintf(output.fp, "Claimset();\n"), Putl(output, 1);
-   (*G222_setused) = false;
+   (*G226_setused) = false;
   }
   tp = tp->tnext;
  }
@@ -8955,111 +9248,141 @@ eprogram(tp)
   printid(tp->U.V13.tsubid->U.V43.tsym->U.V6.lid);
   Putchr('\n', output);
   (void)fprintf(output.fp, "*/\n"), Putl(output, 1);
+ }
+ if ((!minimal && (tp->U.V13.tsubid != (struct S64 *)NIL)) || use(dnew) || use(ddispose) || use(dhalt) || use(dexit) || use(dreset) || use(drewrite) || usesets || (!consoleio && (use(dread) || use(dreadln))) || (!minimal && (runtimechecks || usecase || usejmps || usesets)))
   (void)fprintf(output.fp, "%s<stdlib.h>\n", C24_include), Putl(output, 1);
- }
- if (runtimechecks) {
-  (void)fprintf(output.fp, "/*\n"), Putl(output, 1);
-  (void)fprintf(output.fp, "**     Runtime check support\n"), Putl(output, 1);
-  (void)fprintf(output.fp, "*/\n"), Putl(output, 1);
-  (void)fprintf(output.fp, "%s<signal.h>\n", C24_include), Putl(output, 1);
-  (void)fprintf(output.fp, "%s<stdio.h>\n", C24_include), Putl(output, 1);
-  (void)fprintf(output.fp, "%sChknil(p) ((p)?(p):(fprintf(stderr,\"Fatal: nil pointer dereference\\n\"),exit(1),(p)))\n", C4_define), Putl(output, 1);
-  (void)fprintf(output.fp, "%sChkidx(i,l,h) ((i)>=(l)&&(i)<=(h)?(i):(fprintf(stderr,\"Fatal: array index %%d not in [%%d,%%d]\\n\",(i),(l),(h)),exit(1),(i)))\n", C4_define), Putl(output, 1);
-  (void)fprintf(output.fp, "%s%s\n", C50_static, voidtyp), Putl(output, 1);
-  (void)fprintf(output.fp, "Pasjmp(s)\n"), Putl(output, 1);
-  (void)fprintf(output.fp, "%s%cs;\n", inttyp, tab1), Putl(output, 1);
-  Putchr('{', output),Putchr('\n', output);
-  (void)fprintf(output.fp, "%c%sfprintf(stderr,\"Fatal: memory access violation\\n\");\n", tab1, voidcast), Putl(output, 1);
-  (void)fprintf(output.fp, "%cexit(1);\n", tab1), Putl(output, 1);
-  Putchr('}', output),Putchr('\n', output);
- }
- if (usecase || usesets || use(dinput) || use(doutput) || use(dwrite) || use(dwriteln) || use(dmessage) || use(deof) || use(deoln) || use(dflush) || use(dpage) || use(dread) || use(dreadln) || use(dclose) || use(dreset) || use(drewrite) || use(dget) || use(dput)) {
-  (void)fprintf(output.fp, "/*\n"), Putl(output, 1);
-  (void)fprintf(output.fp, "**     Definitions for i/o\n"), Putl(output, 1);
-  (void)fprintf(output.fp, "*/\n"), Putl(output, 1);
-  (void)fprintf(output.fp, "%s<stdio.h>\n", C24_include), Putl(output, 1);
- }
- if (use(dinput) || use(doutput) || use(dtext)) {
-  etextdef();
-  if (use(dinput)) {
-   if (tp->U.V13.tsubid == (struct S64 *)NIL)
-    (void)fprintf(output.fp, "%s", xtern), Putl(output, 0);
-   (void)fprintf(output.fp, "text%c", tab1), Putl(output, 0);
-   printid(defnams.A[(int)(dinput)]->U.V6.lid);
-   if (tp->U.V13.tsubid != (struct S64 *)NIL)
-    (void)fprintf(output.fp, " = { 0, 0, 0 }"), Putl(output, 0);
-   Putchr(';', output),Putchr('\n', output);
+ if (externalchecks)
+  (void)fprintf(output.fp, "%s\"ptc_checks.h\"\n", C24_include), Putl(output, 1);
+ else
+  if (runtimechecks || (minimal && (usecase || usejmps))) {
+   (void)fprintf(output.fp, "/*\n"), Putl(output, 1);
+   (void)fprintf(output.fp, "**     Runtime check support\n"), Putl(output, 1);
+   (void)fprintf(output.fp, "*/\n"), Putl(output, 1);
+   if (!minimal)
+    (void)fprintf(output.fp, "%s<stdio.h>\n", C24_include), Putl(output, 1);
+   (void)fprintf(output.fp, "%sPTC_CUSTOM_FAIL\n", ifdef), Putl(output, 1);
+   (void)fprintf(output.fp, "extern void PtcFail(int);\n"), Putl(output, 1);
+   (void)fprintf(output.fp, "%s\n", elsif), Putl(output, 1);
+   (void)fprintf(output.fp, "static void PtcFail(int code)\n"), Putl(output, 1);
+   Putchr('{', output),Putchr('\n', output);
+   if (minimal) {
+    (void)fprintf(output.fp, "%c(void)code;\n", tab1), Putl(output, 1);
+    (void)fprintf(output.fp, "%cfor (;;) ;\n", tab1), Putl(output, 1);
+   } else {
+    (void)fprintf(output.fp, "%cfprintf(stderr, \"Fatal: %%s\\n\",\n", tab1), Putl(output, 1);
+    (void)fprintf(output.fp, "%scode == 1 ? \"nil pointer dereference\" :\n", tab2), Putl(output, 1);
+    (void)fprintf(output.fp, "%scode == 2 ? \"array index out of bounds\" :\n", tab2), Putl(output, 1);
+    (void)fprintf(output.fp, "%s\"missing case limb\");\n", tab2), Putl(output, 1);
+    (void)fprintf(output.fp, "%cexit(1);\n", tab1), Putl(output, 1);
+   }
+   Putchr('}', output),Putchr('\n', output);
+   (void)fprintf(output.fp, "%s\n", endif), Putl(output, 1);
+   if (runtimechecks) {
+    (void)fprintf(output.fp, "static void *Chknil(void *p)\n"), Putl(output, 1);
+    Putchr('{', output),Putchr('\n', output);
+    (void)fprintf(output.fp, "%cif (!p) PtcFail(1);\n", tab1), Putl(output, 1);
+    (void)fprintf(output.fp, "%creturn p;\n", tab1), Putl(output, 1);
+    Putchr('}', output),Putchr('\n', output);
+    (void)fprintf(output.fp, "static int Chkidx(int i, int lo, int hi)\n"), Putl(output, 1);
+    Putchr('{', output),Putchr('\n', output);
+    (void)fprintf(output.fp, "%cif (i < lo || i > hi) PtcFail(2);\n", tab1), Putl(output, 1);
+    (void)fprintf(output.fp, "%creturn i;\n", tab1), Putl(output, 1);
+    Putchr('}', output),Putchr('\n', output);
+   }
   }
-  if (use(doutput)) {
-   if (tp->U.V13.tsubid == (struct S64 *)NIL)
-    (void)fprintf(output.fp, "%s", xtern), Putl(output, 0);
-   (void)fprintf(output.fp, "text%c", tab1), Putl(output, 0);
-   printid(defnams.A[(int)(doutput)]->U.V6.lid);
-   if (tp->U.V13.tsubid != (struct S64 *)NIL)
-    (void)fprintf(output.fp, " = { 0, 0, 0 }"), Putl(output, 0);
-   Putchr(';', output),Putchr('\n', output);
+ if (consoleio)
+  (void)fprintf(output.fp, "%s\"ptc_console.h\"\n", C24_include), Putl(output, 1);
+ if (consoleio && usesets)
+  (void)fprintf(output.fp, "%s<stdio.h>\n", C24_include), Putl(output, 1);
+ if (!consoleio) {
+  if ((usecase && !minimal) || usesets || use(dinput) || use(doutput) || use(dwrite) || use(dwriteln) || use(dmessage) || use(deof) || use(deoln) || use(dflush) || use(dpage) || use(dread) || use(dreadln) || use(dclose) || use(dreset) || use(drewrite) || use(dget) || use(dput)) {
+   (void)fprintf(output.fp, "/*\n"), Putl(output, 1);
+   (void)fprintf(output.fp, "**     Definitions for i/o\n"), Putl(output, 1);
+   (void)fprintf(output.fp, "*/\n"), Putl(output, 1);
+   (void)fprintf(output.fp, "%s<stdio.h>\n", C24_include), Putl(output, 1);
   }
- }
- if (use(dinput) || use(dget) || use(dread) || use(dreadln) || use(deof) || use(deoln) || use(dreset) || use(drewrite)) {
-  (void)fprintf(output.fp, "%sFread(x, f) fread((char *)&x, sizeof(x), 1, f)\n", C4_define), Putl(output, 1);
-  (void)fprintf(output.fp, "%sGet(f) Fread((f).buf, (f).fp)\n", C4_define), Putl(output, 1);
-  (void)fprintf(output.fp, "%sGetx(f) (f).init = 1, (f).eoln = (((f).buf = fgetc((f).fp)) == %s) ? (((f).buf = %s), 1) : 0\n", C4_define, nlchr, spchr), Putl(output, 1);
-  (void)fprintf(output.fp, "%sGetchr(f) (f).buf, Getx(f)\n", C4_define), Putl(output, 1);
- }
- if (use(dread) || use(dreadln)) {
-  (void)fprintf(output.fp, "%sFILE%c*Tmpfil;\n", C50_static, tab1), Putl(output, 1);
-  (void)fprintf(output.fp, "%slong%cTmplng;\n", C50_static, tab1), Putl(output, 1);
-  (void)fprintf(output.fp, "%sdouble%cTmpdbl;\n", C50_static, tab1), Putl(output, 1);
-  (void)fprintf(output.fp, "%sFscan(f) (f).init ? ungetc((f).buf, (f).fp) : 0, Tmpfil = (f).fp\n", C4_define), Putl(output, 1);
-  (void)fprintf(output.fp, "%sScan(p, a) Scanck(fscanf(Tmpfil, p, a))\n", C4_define), Putl(output, 1);
-  (void)fprintf(output.fp, "%s%cScanck();\n", voidtyp, tab1), Putl(output, 1);
-  if (use(dreadln))
-   (void)fprintf(output.fp, "%s%s%cGetl();\n", C50_static, voidtyp, tab1), Putl(output, 1);
- }
- if (use(deoln))
-  (void)fprintf(output.fp, "%sEoln(f) ((f).eoln ? true : false)\n", C4_define), Putl(output, 1);
- if (use(deof))
-  (void)fprintf(output.fp, "%sEof(f) ((((f).init == 0) ? (Get(f)) : 0, ((f).eof ? 1 : feof((f).fp))) ? true : false)\n", C4_define), Putl(output, 1);
- if (use(doutput) || use(dput) || use(dwrite) || use(dwriteln) || use(dreset) || use(drewrite) || use(dclose)) {
-  (void)fprintf(output.fp, "%sFwrite(x, f) fwrite((char *)&x, sizeof(x), 1, f)\n", C4_define), Putl(output, 1);
-  (void)fprintf(output.fp, "%sPut(f) Fwrite((f).buf, (f).fp)\n", C4_define), Putl(output, 1);
-  (void)fprintf(output.fp, "%sPutx(f) (f).eoln = ((f).buf == %s), %sfputc((f).buf, (f).fp)\n", C4_define, nlchr, voidcast), Putl(output, 1);
-  (void)fprintf(output.fp, "%sPutchr(c, f) (f).buf = (c), Putx(f)\n", C4_define), Putl(output, 1);
-  (void)fprintf(output.fp, "%sPutl(f, v) (f).eoln = v\n", C4_define), Putl(output, 1);
- }
- if (use(dreset) || use(drewrite) || use(dclose)) {
-  (void)fprintf(output.fp, "%sFinish(f) ((f).out && !(f).eoln) ? (Putchr(%s, f), 0) : 0, !fseek((f).fp, 0L, 0)\n", C4_define, nlchr), Putl(output, 1);
-  (void)fprintf(output.fp, "%sint%cfseek();\n", xtern, tab1), Putl(output, 1);
- }
- if (use(dclose)) {
-  (void)fprintf(output.fp, "%sClose(f) (f).init = ((f).init ? (fclose((f).fp), 0) : 0), (f).fp = NULL\n", C4_define), Putl(output, 1);
-  (void)fprintf(output.fp, "%sClosex(f) (f).init = ((f).init ? (Finish(f), fclose((f).fp), 0) : 0), (f).fp = NULL\n", C4_define), Putl(output, 1);
- }
- if (use(dreset)) {
-  (void)fprintf(output.fp, "%sREADONLY\n", ifdef), Putl(output, 1);
-  (void)fprintf(output.fp, "%s%s%cRmode[] = \"r\";\n", C50_static, chartyp, tab1), Putl(output, 1);
-  (void)fprintf(output.fp, "%s\n", elsif), Putl(output, 1);
-  (void)fprintf(output.fp, "%s%s%cRmode[] = \"r+\";\n", C50_static, chartyp, tab1), Putl(output, 1);
-  (void)fprintf(output.fp, "%s\n", endif), Putl(output, 1);
-  (void)fprintf(output.fp, "%sReset(f, n, l) (f).init = (f).init ? !fseek((f).fp, 0L, 0) : (((f).fp = Fopen(n, l, Rmode)), 1), (f).eof = (f).out = 0, Get(f)\n", C4_define), Putl(output, 1);
-  (void)fprintf(output.fp, "%sResetx(f, n, l) (f).init = (f).init ? (Finish(f)) : (((f).fp = Fopen(n, l, Rmode)), 1), (f).eof = (f).out = 0, Getx(f)\n", C4_define), Putl(output, 1);
-  usefopn = true;
- }
- if (use(drewrite)) {
-  (void)fprintf(output.fp, "%sWRITEONLY\n", ifdef), Putl(output, 1);
-  (void)fprintf(output.fp, "%s%s%cWmode[] = \"w\";\n", C50_static, chartyp, tab1), Putl(output, 1);
-  (void)fprintf(output.fp, "%s\n", elsif), Putl(output, 1);
-  (void)fprintf(output.fp, "%s%s%cWmode[] = \"w+\";\n", C50_static, chartyp, tab1), Putl(output, 1);
-  (void)fprintf(output.fp, "%s\n", endif), Putl(output, 1);
-  (void)fprintf(output.fp, "%sRewrite(f, n, l) (f).init = (f).init ? !fseek((f).fp, 0L, 0) : (((f).fp = Fopen(n, l, Wmode)), 1), (f).out = (f).eof = 1\n", C4_define), Putl(output, 1);
-  (void)fprintf(output.fp, "%sRewritex(f, n, l) (f).init = (f).init ? (Finish(f)) : (((f).fp = Fopen(n, l, Wmode)), 1), (f).out = (f).eof = (f).eoln = 1\n", C4_define), Putl(output, 1);
-  usefopn = true;
- }
- if (usefopn) {
-  (void)fprintf(output.fp, "%sFILE%c*Fopen();\n", C50_static, tab1), Putl(output, 1);
-  (void)fprintf(output.fp, "%s%s\n", ifndef, maxfilename), Putl(output, 1);
-  (void)fprintf(output.fp, "%s%s %1d\n", C4_define, maxfilename, (maxtoknlen + 1)), Putl(output, 1);
-  (void)fprintf(output.fp, "%s\n", endif), Putl(output, 1);
+  if (use(dinput) || use(doutput) || use(dtext)) {
+   etextdef();
+   if (use(dinput)) {
+    if (tp->U.V13.tsubid == (struct S64 *)NIL)
+     (void)fprintf(output.fp, "%s", xtern), Putl(output, 0);
+    (void)fprintf(output.fp, "text%c", tab1), Putl(output, 0);
+    printid(defnams.A[(int)(dinput)]->U.V6.lid);
+    if (tp->U.V13.tsubid != (struct S64 *)NIL)
+     (void)fprintf(output.fp, " = { 0, 0, 0 }"), Putl(output, 0);
+    Putchr(';', output),Putchr('\n', output);
+   }
+   if (use(doutput)) {
+    if (tp->U.V13.tsubid == (struct S64 *)NIL)
+     (void)fprintf(output.fp, "%s", xtern), Putl(output, 0);
+    (void)fprintf(output.fp, "text%c", tab1), Putl(output, 0);
+    printid(defnams.A[(int)(doutput)]->U.V6.lid);
+    if (tp->U.V13.tsubid != (struct S64 *)NIL)
+     (void)fprintf(output.fp, " = { 0, 0, 0 }"), Putl(output, 0);
+    Putchr(';', output),Putchr('\n', output);
+   }
+  }
+  if (use(dinput) || use(dget) || use(dread) || use(dreadln) || use(deof) || use(deoln) || use(dreset) || use(drewrite)) {
+   (void)fprintf(output.fp, "%sFread(x, f) fread((char *)&x, sizeof(x), 1, f)\n", C4_define), Putl(output, 1);
+   (void)fprintf(output.fp, "%sGet(f) Fread((f).buf, (f).fp)\n", C4_define), Putl(output, 1);
+   (void)fprintf(output.fp, "%sGetx(f) (f).init = 1, (f).eoln = (((f).buf = fgetc((f).fp)) == %s) ? (((f).buf = %s), 1) : 0\n", C4_define, nlchr, spchr), Putl(output, 1);
+   (void)fprintf(output.fp, "%sGetchr(f) (f).buf, Getx(f)\n", C4_define), Putl(output, 1);
+  }
+  if (use(dread) || use(dreadln)) {
+   (void)fprintf(output.fp, "%sFILE%c*Tmpfil;\n", C50_static, tab1), Putl(output, 1);
+   (void)fprintf(output.fp, "%slong%cTmplng;\n", C50_static, tab1), Putl(output, 1);
+   (void)fprintf(output.fp, "%sdouble%cTmpdbl;\n", C50_static, tab1), Putl(output, 1);
+   (void)fprintf(output.fp, "%sFscan(f) (f).init ? ungetc((f).buf, (f).fp) : 0, Tmpfil = (f).fp\n", C4_define), Putl(output, 1);
+   (void)fprintf(output.fp, "%sScan(p, a) Scanck(fscanf(Tmpfil, p, a))\n", C4_define), Putl(output, 1);
+   (void)fprintf(output.fp, "%s%cScanck();\n", voidtyp, tab1), Putl(output, 1);
+   if (use(dreadln))
+    (void)fprintf(output.fp, "%s%s%cGetl();\n", C50_static, voidtyp, tab1), Putl(output, 1);
+  }
+  if (use(deoln))
+   (void)fprintf(output.fp, "%sEoln(f) ((f).eoln ? true : false)\n", C4_define), Putl(output, 1);
+  if (use(deof))
+   (void)fprintf(output.fp, "%sEof(f) ((((f).init == 0) ? (Get(f)) : 0, ((f).eof ? 1 : feof((f).fp))) ? true : false)\n", C4_define), Putl(output, 1);
+  if (use(doutput) || use(dput) || use(dwrite) || use(dwriteln) || use(dreset) || use(drewrite) || use(dclose)) {
+   (void)fprintf(output.fp, "%sFwrite(x, f) fwrite((char *)&x, sizeof(x), 1, f)\n", C4_define), Putl(output, 1);
+   (void)fprintf(output.fp, "%sPut(f) Fwrite((f).buf, (f).fp)\n", C4_define), Putl(output, 1);
+   (void)fprintf(output.fp, "%sPutx(f) (f).eoln = ((f).buf == %s), %sfputc((f).buf, (f).fp)\n", C4_define, nlchr, voidcast), Putl(output, 1);
+   (void)fprintf(output.fp, "%sPutchr(c, f) (f).buf = (c), Putx(f)\n", C4_define), Putl(output, 1);
+   (void)fprintf(output.fp, "%sPutl(f, v) (f).eoln = v\n", C4_define), Putl(output, 1);
+  }
+  if (use(dreset) || use(drewrite) || use(dclose)) {
+   (void)fprintf(output.fp, "%sFinish(f) ((f).out && !(f).eoln) ? (Putchr(%s, f), 0) : 0, !fseek((f).fp, 0L, 0)\n", C4_define, nlchr), Putl(output, 1);
+   (void)fprintf(output.fp, "%sint%cfseek();\n", xtern, tab1), Putl(output, 1);
+  }
+  if (use(dclose)) {
+   (void)fprintf(output.fp, "%sClose(f) (f).init = ((f).init ? (fclose((f).fp), 0) : 0), (f).fp = NULL\n", C4_define), Putl(output, 1);
+   (void)fprintf(output.fp, "%sClosex(f) (f).init = ((f).init ? (Finish(f), fclose((f).fp), 0) : 0), (f).fp = NULL\n", C4_define), Putl(output, 1);
+  }
+  if (use(dreset)) {
+   (void)fprintf(output.fp, "%sREADONLY\n", ifdef), Putl(output, 1);
+   (void)fprintf(output.fp, "%s%s%cRmode[] = \"r\";\n", C50_static, chartyp, tab1), Putl(output, 1);
+   (void)fprintf(output.fp, "%s\n", elsif), Putl(output, 1);
+   (void)fprintf(output.fp, "%s%s%cRmode[] = \"r+\";\n", C50_static, chartyp, tab1), Putl(output, 1);
+   (void)fprintf(output.fp, "%s\n", endif), Putl(output, 1);
+   (void)fprintf(output.fp, "%sReset(f, n, l) (f).init = (f).init ? !fseek((f).fp, 0L, 0) : (((f).fp = Fopen(n, l, Rmode)), 1), (f).eof = (f).out = 0, Get(f)\n", C4_define), Putl(output, 1);
+   (void)fprintf(output.fp, "%sResetx(f, n, l) (f).init = (f).init ? (Finish(f)) : (((f).fp = Fopen(n, l, Rmode)), 1), (f).eof = (f).out = 0, Getx(f)\n", C4_define), Putl(output, 1);
+   usefopn = true;
+  }
+  if (use(drewrite)) {
+   (void)fprintf(output.fp, "%sWRITEONLY\n", ifdef), Putl(output, 1);
+   (void)fprintf(output.fp, "%s%s%cWmode[] = \"w\";\n", C50_static, chartyp, tab1), Putl(output, 1);
+   (void)fprintf(output.fp, "%s\n", elsif), Putl(output, 1);
+   (void)fprintf(output.fp, "%s%s%cWmode[] = \"w+\";\n", C50_static, chartyp, tab1), Putl(output, 1);
+   (void)fprintf(output.fp, "%s\n", endif), Putl(output, 1);
+   (void)fprintf(output.fp, "%sRewrite(f, n, l) (f).init = (f).init ? !fseek((f).fp, 0L, 0) : (((f).fp = Fopen(n, l, Wmode)), 1), (f).out = (f).eof = 1\n", C4_define), Putl(output, 1);
+   (void)fprintf(output.fp, "%sRewritex(f, n, l) (f).init = (f).init ? (Finish(f)) : (((f).fp = Fopen(n, l, Wmode)), 1), (f).out = (f).eof = (f).eoln = 1\n", C4_define), Putl(output, 1);
+   usefopn = true;
+  }
+  if (usefopn) {
+   (void)fprintf(output.fp, "%sFILE%c*Fopen();\n", C50_static, tab1), Putl(output, 1);
+   (void)fprintf(output.fp, "%s%s\n", ifndef, maxfilename), Putl(output, 1);
+   (void)fprintf(output.fp, "%s%s %1d\n", C4_define, maxfilename, (maxtoknlen + 1)), Putl(output, 1);
+   (void)fprintf(output.fp, "%s\n", endif), Putl(output, 1);
+  }
  }
  if (usecase || usejmps) {
   (void)fprintf(output.fp, "/*\n"), Putl(output, 1);
@@ -9099,7 +9422,8 @@ eprogram(tp)
   (void)fprintf(output.fp, " ("), Putl(output, 0);
   printid(defnams.A[(int)(dboolean)]->U.V6.lid);
   (void)fprintf(output.fp, ")1\n"), Putl(output, 1);
-  (void)fprintf(output.fp, "%s%s%c*Bools[];\n", C50_static, chartyp, tab1), Putl(output, 1);
+  if (!consoleio)
+   (void)fprintf(output.fp, "%s%s%c*Bools[2];\n", C50_static, chartyp, tab1), Putl(output, 1);
  }
  capital(defnams.A[(int)(dinteger)]);
  if (use(dinteger)) {
@@ -9108,7 +9432,7 @@ eprogram(tp)
   Putchr(';', output),Putchr('\n', output);
  }
  if (use(dmaxint))
-  (void)fprintf(output.fp, "%smaxint%c%1d\n", C4_define, tab1, maxint), Putl(output, 1);
+  (void)fprintf(output.fp, "%smaxint%c%1d\n", C4_define, tab1, targetmaxint), Putl(output, 1);
  capital(defnams.A[(int)(dreal)]);
  if (use(dreal)) {
   (void)fprintf(output.fp, "%s%s%c", typdef, realtyp, tab1), Putl(output, 0);
@@ -9145,8 +9469,6 @@ eprogram(tp)
  }
  if (usenilp)
   (void)fprintf(output.fp, "%sNIL 0\n", C4_define), Putl(output, 1);
- if ((tp->U.V13.tsubid == (struct S64 *)NIL) && (use(dnew) || use(ddispose) || use(dhalt) || use(dexit) || use(dreset) || use(drewrite)))
-  (void)fprintf(output.fp, "%s<stdlib.h>\n", C24_include), Putl(output, 1);
  if (use(dreset) || use(drewrite)) {
   (void)fprintf(output.fp, "%s<string.h>\n", C24_include), Putl(output, 1);
   (void)fprintf(output.fp, "%s<unistd.h>\n", C24_include), Putl(output, 1);
@@ -9171,7 +9493,7 @@ eprogram(tp)
   (void)fprintf(output.fp, "%s%s%cConset[];\n", C50_static, setptyp, tab1), Putl(output, 1);
   (void)fprintf(output.fp, "%s%s%cSetncpy();\n", C50_static, voidtyp, tab1), Putl(output, 1);
  }
- if (align) {
+ if (align && (!minimal || usesets || usealignstrings)) {
   (void)fprintf(output.fp, "%sSETALIGN\n", ifndef), Putl(output, 1);
   (void)fprintf(output.fp, "%sSETALIGN(x) Alignset(x)\n", C4_define), Putl(output, 1);
   (void)fprintf(output.fp, "%s", C50_static), Putl(output, 0);
@@ -9183,7 +9505,17 @@ eprogram(tp)
   (void)fprintf(output.fp, "struct String { char   A[%1d+1]; } *Alignstr();\n", maxtoknlen), Putl(output, 1);
   (void)fprintf(output.fp, "%s\n", endif), Putl(output, 1);
  }
- (void)fprintf(output.fp, "%s%s *strncpy();\n", xtern, chartyp), Putl(output, 1);
+ if (minimal && usestrcopy) {
+  (void)fprintf(output.fp, "static void PtcCopy(char *d, char *s, unsigned int n)\n"), Putl(output, 1);
+  Putchr('{', output),Putchr('\n', output);
+  (void)fprintf(output.fp, "%cwhile (n--) {\n", tab1), Putl(output, 1);
+  (void)fprintf(output.fp, "%s*d++ = *s;\n", tab2), Putl(output, 1);
+  (void)fprintf(output.fp, "%sif (*s) s++;\n", tab2), Putl(output, 1);
+  (void)fprintf(output.fp, "%c}\n", tab1), Putl(output, 1);
+  Putchr('}', output),Putchr('\n', output);
+ } else
+  if (!minimal)
+   (void)fprintf(output.fp, "%s%s *strncpy();\n", xtern, chartyp), Putl(output, 1);
  if (use(dargc) || use(dargv)) {
   (void)fprintf(output.fp, "/*\n"), Putl(output, 1);
   (void)fprintf(output.fp, "**     Definitions for argv-operations\n"), Putl(output, 1);
@@ -9220,6 +9552,8 @@ eprogram(tp)
   (void)fprintf(output.fp, "**     Start of program code\n"), Putl(output, 1);
   (void)fprintf(output.fp, "*/\n"), Putl(output, 1);
   if (use(dargc) || use(dargv)) {
+   if (minimal)
+    (void)fprintf(output.fp, "int "), Putl(output, 0);
    (void)fprintf(output.fp, "main(_ac, _av)\n"), Putl(output, 1);
    (void)fprintf(output.fp, "%s%c_ac;\n", inttyp, tab1), Putl(output, 1);
    (void)fprintf(output.fp, "%s%c*_av[];\n", chartyp, tab1), Putl(output, 1);
@@ -9228,16 +9562,17 @@ eprogram(tp)
    (void)fprintf(output.fp, "%cargc = _ac;\n", tab1), Putl(output, 1);
    (void)fprintf(output.fp, "%cargv = _av;\n", tab1), Putl(output, 1);
   } else {
-   (void)fprintf(output.fp, "main()\n"), Putl(output, 1);
+   if (minimal)
+    (void)fprintf(output.fp, "int main(void)\n"), Putl(output, 1);
+   else
+    (void)fprintf(output.fp, "main()\n"), Putl(output, 1);
    Putchr('{', output),Putchr('\n', output);
   }
-  if (runtimechecks)
-   (void)fprintf(output.fp, "%c(void)signal(SIGSEGV, Pasjmp);\n", tab1), Putl(output, 1);
-  if (use(dinput))
+  if (use(dinput) && !consoleio)
    (void)fprintf(output.fp, "%cinput.fp = stdin;\n", tab1), Putl(output, 1);
-  if (use(doutput))
+  if (use(doutput) && !consoleio)
    (void)fprintf(output.fp, "%coutput.fp = stdout;\n", tab1), Putl(output, 1);
-  if (use(dinput)) {
+  if (use(dinput) && !consoleio) {
    (void)fprintf(output.fp, "%sSTDINIT\n", ifdef), Putl(output, 1);
    (void)fprintf(output.fp, "%c%s(Getx(input));\n", tab1, voidcast), Putl(output, 1);
    (void)fprintf(output.fp, "%s\n", endif), Putl(output, 1);
@@ -9245,10 +9580,18 @@ eprogram(tp)
   increment();
   elabel(tp);
   estmt(tp->U.V13.tsubstmt);
+  if (consoleio) {
+   indent();
+   (void)fprintf(output.fp, "PtcFlush();\n"), Putl(output, 1);
+  }
   indent();
-  (void)fprintf(output.fp, "exit(0);\n"), Putl(output, 1);
-  indent();
-  (void)fprintf(output.fp, "/* NOTREACHED */\n"), Putl(output, 1);
+  if (minimal)
+   (void)fprintf(output.fp, "return 0;\n"), Putl(output, 1);
+  else {
+   (void)fprintf(output.fp, "exit(0);\n"), Putl(output, 1);
+   indent();
+   (void)fprintf(output.fp, "/* NOTREACHED */\n"), Putl(output, 1);
+  }
   decrement();
   Putchr('}', output),Putchr('\n', output);
   edconst(tp->U.V13.tsubconst);
@@ -9350,7 +9693,7 @@ ebits(tp)
 
   if (B59 <= B60)
    for (n = B59; ; n++) {
-    Setncpy(sets.A[n].S, Conset[182], sizeof(sets.A[n].S));
+    Setncpy(sets.A[n].S, Conset[189], sizeof(sets.A[n].S));
     if (n == B60) break;
    }
  }
@@ -9433,32 +9776,32 @@ emit()
  static char usigned[]       = "unsigned ";
  boolean conflag, setused, dropset, doarrow, donearr;
  integer indnt;
- boolean *F221;
- boolean *F223;
  boolean *F225;
  boolean *F227;
  boolean *F229;
- integer *F231;
+ boolean *F231;
+ boolean *F233;
+ integer *F235;
 
- F231 = G230_indnt;
- G230_indnt = &indnt;
- F229 = G228_donearr;
- G228_donearr = &donearr;
- F227 = G226_doarrow;
- G226_doarrow = &doarrow;
- F225 = G224_dropset;
- G224_dropset = &dropset;
- F223 = G222_setused;
- G222_setused = &setused;
- F221 = G220_conflag;
- G220_conflag = &conflag;
- (*G230_indnt) = 0;
+ F235 = G234_indnt;
+ G234_indnt = &indnt;
+ F233 = G232_donearr;
+ G232_donearr = &donearr;
+ F231 = G230_doarrow;
+ G230_doarrow = &doarrow;
+ F229 = G228_dropset;
+ G228_dropset = &dropset;
+ F227 = G226_setused;
+ G226_setused = &setused;
+ F225 = G224_conflag;
+ G224_conflag = &conflag;
+ (*G234_indnt) = 0;
  varno = 0;
- (*G220_conflag) = false;
- (*G222_setused) = false;
- (*G224_dropset) = false;
- (*G226_doarrow) = false;
- (*G228_donearr) = false;
+ (*G224_conflag) = false;
+ (*G226_setused) = false;
+ (*G228_dropset) = false;
+ (*G230_doarrow) = false;
+ (*G232_donearr) = false;
  eprogram(top);
  if (usebool)
   (void)fprintf(output.fp, "%s%s%c*Bools[] = { \"false\", \"true\" };\n", C50_static, chartyp, tab1), Putl(output, 1);
@@ -9852,8 +10195,13 @@ emit()
   (void)fprintf(output.fp, "Caseerror(n)\n"), Putl(output, 1);
   (void)fprintf(output.fp, "%c%s%cn;\n", tab1, inttyp, tab1), Putl(output, 1);
   Putchr('{', output),Putchr('\n', output);
-  (void)fprintf(output.fp, "%c%sfprintf(stderr, \"Missing case limb: line %%d\\n\", n);\n", tab1, voidcast), Putl(output, 1);
-  (void)fprintf(output.fp, "%cexit(1);\n", tab1), Putl(output, 1);
+  if (minimal) {
+   (void)fprintf(output.fp, "%c(void)n;\n", tab1), Putl(output, 1);
+   (void)fprintf(output.fp, "%cPtcFail(3);\n", tab1), Putl(output, 1);
+  } else {
+   (void)fprintf(output.fp, "%c%sfprintf(stderr, \"Missing case limb: line %%d\\n\", n);\n", tab1, voidcast), Putl(output, 1);
+   (void)fprintf(output.fp, "%cexit(1);\n", tab1), Putl(output, 1);
+  }
   (void)fprintf(output.fp, "%c/* NOTREACHED */\n", tab1), Putl(output, 1);
   Putchr('}', output),Putchr('\n', output);
  }
@@ -9887,12 +10235,12 @@ emit()
   (void)fprintf(output.fp, "%creturn floor(%s(0.5+f));\n", tab1, dblcast), Putl(output, 1);
   Putchr('}', output),Putchr('\n', output);
  }
- G220_conflag = F221;
- G222_setused = F223;
- G224_dropset = F225;
- G226_doarrow = F227;
- G228_donearr = F229;
- G230_indnt = F231;
+ G224_conflag = F225;
+ G226_setused = F227;
+ G228_dropset = F229;
+ G230_doarrow = F231;
+ G232_donearr = F233;
+ G234_indnt = F235;
 }
 
 void initialize();
@@ -9955,7 +10303,7 @@ defid(nt, did, str)
 L999:
  tp = newid(saveid(&w));
  defnams.A[(int)(did)] = tp->U.V43.tsym;
- if (Member((unsigned)(nt), Conset[183])) {
+ if (Member((unsigned)(nt), Conset[190])) {
   tv = mknode(npredef);
   tv->U.V12.tdef = did;
   tv->U.V12.tobtyp = tnone;
@@ -10019,7 +10367,7 @@ defkey(s, w)
    }
  }
  {
-  register struct S232 *W73 = &keytab.A[(unsigned)(s)];
+  register struct S236 *W73 = &keytab.A[(unsigned)(s)];
 
   W73->wrd = w;
   W73->sym = s;
@@ -10070,7 +10418,7 @@ L999:
   error(emanymachs);
  nmachdefs = nmachdefs + 1;
  {
-  register struct S219 *W76 = &machdefs.A[nmachdefs - 1];
+  register struct S223 *W76 = &machdefs.A[nmachdefs - 1];
 
   W76->lolim = lo;
   W76->hilim = hi;
@@ -10139,6 +10487,8 @@ initialize()
  usescpy = false;
  usefopn = false;
  usescan = false;
+ usestrcopy = false;
+ usealignstrings = false;
  usegetl = false;
  usecase = false;
  usejmps = false;
@@ -10385,7 +10735,7 @@ initialize()
  deftab.A[(int)(dboolean)]->U.V14.tbind->U.V17.tscalid = deftab.A[(int)(dfalse)];
  deftab.A[(int)(dfalse)]->tnext = deftab.A[(int)(dtrue)];
  currsym.st = sinteger;
- currsym.U.V3.vint = maxint;
+ currsym.U.V3.vint = targetmaxint;
  deftab.A[(int)(dmaxint)]->U.V14.tbind = mklit();
  deftab.A[(int)(dargc)]->U.V14.tbind = deftab.A[(int)(dinteger)]->U.V14.tbind;
  deftab.A[(int)(dinput)]->U.V14.tbind = deftab.A[(int)(dtext)]->U.V14.tbind;
@@ -10423,7 +10773,7 @@ initialize()
       default:
      Caseerror(Line);
     }
-    if (Member((unsigned)(t), Conset[184]))
+    if (Member((unsigned)(t), Conset[191]))
      typnods.A[(int)(t)]->U.V12.tobtyp = t;
     if (t == B84) break;
    }
@@ -10477,9 +10827,17 @@ initialize()
  nmachdefs = 0;
  defmach(0, 255, *((machdefstr *)STRALIGN("unsigned char   ")));
  defmach(-128, 127, *((machdefstr *)STRALIGN("signed char     ")));
- defmach(0, 65535, *((machdefstr *)STRALIGN("unsigned short  ")));
- defmach(-32768, 32767, *((machdefstr *)STRALIGN("short           ")));
- defmach(-2147483647, 2147483647, *((machdefstr *)STRALIGN("int             ")));
+ if (target16) {
+  defmach(0, 65535, *((machdefstr *)STRALIGN("unsigned int    ")));
+  defmach(-32768, 32767, *((machdefstr *)STRALIGN("int             ")));
+ } else {
+  defmach(0, 65535, *((machdefstr *)STRALIGN("unsigned short  ")));
+  defmach(-32768, 32767, *((machdefstr *)STRALIGN("short           ")));
+ }
+ if (target16)
+  defmach(-2147483647, 2147483647, *((machdefstr *)STRALIGN("long            ")));
+ else
+  defmach(-2147483647, 2147483647, *((machdefstr *)STRALIGN("int             ")));
 }
 
 extern void exit();
@@ -10519,9 +10877,41 @@ char *_av[];
  if (setjmp(J[0].jb))
  goto L9999;
  runtimechecks = false;
- if (argc > 1) {
-  Argvgt(1, argbuf.A, sizeof(argbuf.A));
-  runtimechecks = (boolean)((argbuf.A[1 - 1] == '-') && (argbuf.A[2 - 1] == 'r'));
+ minimal = false;
+ externalchecks = false;
+ target16 = false;
+ consoleio = false;
+ targetmaxint = maxint;
+ {
+  integer B87 = 1,
+   B88 = argc - 1;
+
+  if (B87 <= B88)
+   for (argi = B87; ; argi++) {
+    Argvgt(argi, argbuf.A, sizeof(argbuf.A));
+    if ((argbuf.A[1 - 1] == '-') && (argbuf.A[3 - 1] == ' ') && (Member((unsigned)(argbuf.A[2 - 1]), Conset[192]))) {
+     if (argbuf.A[2 - 1] == 'r')
+      runtimechecks = true;
+     if (argbuf.A[2 - 1] == 'm')
+      minimal = true;
+     if (argbuf.A[2 - 1] == 'c') {
+      consoleio = true;
+      minimal = true;
+     }
+     if (argbuf.A[2 - 1] == 'e') {
+      runtimechecks = true;
+      externalchecks = true;
+     }
+    } else
+     if ((argbuf.A[1 - 1] == '-') && (argbuf.A[2 - 1] == 'i') && (argbuf.A[3 - 1] == '1') && (argbuf.A[4 - 1] == '6') && (argbuf.A[5 - 1] == ' ')) {
+      target16 = true;
+      targetmaxint = 32767;
+     } else {
+      (void)fprintf(stderr, "Usage: ptc [-r] [-e] [-m] [-c] [-i16] < source.p > source.c\n"), Putl(output, 1);
+      exit(1);
+     }
+    if (argi == B88) break;
+   }
  }
  initialize();
  if (echo)
@@ -10582,128 +10972,131 @@ L9999:
 **     End of program code
 */
 static setword Q0[] = {
- 1,
- 0x03FD
+ 8,
+ 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+ 0x2028, 0x0004
 };
 static setword Q1[] = {
  1,
- 0x004C
+ 0x03FD
 };
 static setword Q2[] = {
  1,
- 0x0000
+ 0x004C
 };
 static setword Q3[] = {
- 2,
- 0x000E, 0x5210
+ 1,
+ 0x0000
 };
 static setword Q4[] = {
  2,
- 0x000E, 0x1210
+ 0x000E, 0x5210
 };
 static setword Q5[] = {
- 1,
- 0x0C00
+ 2,
+ 0x000E, 0x1210
 };
 static setword Q6[] = {
  1,
- 0x000C
+ 0x0C00
 };
 static setword Q7[] = {
+ 1,
+ 0x000C
+};
+static setword Q8[] = {
  2,
  0x000E, 0x0210
 };
-static setword Q8[] = {
+static setword Q9[] = {
  3,
  0x0000, 0x0000, 0x0060
 };
-static setword Q9[] = {
+static setword Q10[] = {
  4,
  0x0002, 0x0000, 0x0064, 0x0800
 };
-static setword Q10[] = {
+static setword Q11[] = {
  1,
  0x0C00
 };
-static setword Q11[] = {
+static setword Q12[] = {
  1,
  0x000C
 };
-static setword Q12[] = {
+static setword Q13[] = {
  4,
  0x0000, 0x0000, 0x4FF0, 0x0008
-};
-static setword Q13[] = {
- 3,
- 0x0000, 0x0000, 0x0780
 };
 static setword Q14[] = {
  3,
  0x0000, 0x0000, 0x0780
 };
 static setword Q15[] = {
+ 3,
+ 0x0000, 0x0000, 0x0780
+};
+static setword Q16[] = {
  5,
  0x0000, 0x0001, 0x0000, 0x0000, 0x0001
 };
-static setword Q16[] = {
+static setword Q17[] = {
  3,
  0x0000, 0x0000, 0x07E0
 };
-static setword Q17[] = {
+static setword Q18[] = {
  3,
  0x0000, 0x0000, 0xB000
 };
-static setword Q18[] = {
+static setword Q19[] = {
  4,
  0x0000, 0x0008, 0x0000, 0x0040
 };
-static setword Q19[] = {
+static setword Q20[] = {
  3,
  0x0000, 0x0000, 0xB560
 };
-static setword Q20[] = {
+static setword Q21[] = {
  4,
  0x0000, 0x0000, 0x4FF0, 0x0008
 };
-static setword Q21[] = {
+static setword Q22[] = {
  1,
  0x0C00
-};
-static setword Q22[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1700
 };
 static setword Q23[] = {
  4,
  0x0000, 0x0000, 0x0000, 0x1700
 };
 static setword Q24[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1700
+};
+static setword Q25[] = {
  3,
  0x0000, 0x0040, 0x4000
 };
-static setword Q25[] = {
- 1,
- 0x000E
-};
 static setword Q26[] = {
- 1,
- 0x000E
+ 3,
+ 0x8C00, 0x8840, 0x6001
 };
 static setword Q27[] = {
- 1,
- 0x000C
+ 3,
+ 0x0000, 0x0040, 0x4001
 };
 static setword Q28[] = {
- 1,
- 0x000E
+ 8,
+ 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+ 0x0002, 0x0040
 };
 static setword Q29[] = {
- 1,
- 0x000E
+ 8,
+ 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+ 0x0002, 0x0040
 };
 static setword Q30[] = {
- 2,
- 0x8000, 0x0045
+ 3,
+ 0x0000, 0x8000, 0x0001
 };
 static setword Q31[] = {
  1,
@@ -10714,340 +11107,340 @@ static setword Q32[] = {
  0x000E
 };
 static setword Q33[] = {
- 2,
- 0x8000, 0x000F
+ 1,
+ 0x000C
 };
 static setword Q34[] = {
- 3,
- 0x0000, 0x0000, 0x0560
+ 1,
+ 0x000E
 };
 static setword Q35[] = {
- 3,
- 0x0000, 0x0000, 0x0060
+ 1,
+ 0x000E
 };
 static setword Q36[] = {
  2,
- 0x43A0, 0x0040
+ 0x8000, 0x0045
 };
 static setword Q37[] = {
  1,
- 0x0300
+ 0x000E
 };
 static setword Q38[] = {
  1,
- 0x000C
+ 0x000E
 };
 static setword Q39[] = {
+ 2,
+ 0x8000, 0x000F
+};
+static setword Q40[] = {
+ 3,
+ 0x0000, 0x0000, 0x0560
+};
+static setword Q41[] = {
+ 3,
+ 0x0000, 0x0000, 0x0060
+};
+static setword Q42[] = {
+ 2,
+ 0x43A0, 0x0040
+};
+static setword Q43[] = {
+ 1,
+ 0x0300
+};
+static setword Q44[] = {
  1,
  0x000C
 };
-static setword Q40[] = {
- 1,
- 0x0804
-};
-static setword Q41[] = {
- 1,
- 0x0408
-};
-static setword Q42[] = {
- 1,
- 0x0C0C
-};
-static setword Q43[] = {
- 2,
- 0x0000, 0x0003
-};
-static setword Q44[] = {
- 2,
- 0x0000, 0x0003
-};
 static setword Q45[] = {
- 2,
- 0x0000, 0x0003
+ 1,
+ 0x000C
 };
 static setword Q46[] = {
- 2,
- 0x0000, 0x0003
+ 1,
+ 0x0804
 };
 static setword Q47[] = {
  1,
- 0x0300
+ 0x0408
 };
 static setword Q48[] = {
  1,
- 0x000C
+ 0x0C0C
 };
 static setword Q49[] = {
+ 3,
+ 0x0000, 0x8000, 0x0001
+};
+static setword Q50[] = {
+ 3,
+ 0x0000, 0x8000, 0x0001
+};
+static setword Q51[] = {
+ 2,
+ 0x0000, 0x0003
+};
+static setword Q52[] = {
+ 2,
+ 0x0000, 0x0003
+};
+static setword Q53[] = {
+ 2,
+ 0x0000, 0x0003
+};
+static setword Q54[] = {
+ 2,
+ 0x0000, 0x0003
+};
+static setword Q55[] = {
+ 1,
+ 0x0300
+};
+static setword Q56[] = {
+ 1,
+ 0x000C
+};
+static setword Q57[] = {
  1,
  0x0804
 };
-static setword Q50[] = {
+static setword Q58[] = {
  1,
  0x0408
 };
-static setword Q51[] = {
- 1,
- 0x0300
-};
-static setword Q52[] = {
- 1,
- 0x0300
-};
-static setword Q53[] = {
- 1,
- 0x0300
-};
-static setword Q54[] = {
- 1,
- 0x4380
-};
-static setword Q55[] = {
- 2,
- 0x0020, 0x0040
-};
-static setword Q56[] = {
- 3,
- 0x4010, 0x0C00, 0x000A
-};
-static setword Q57[] = {
- 5,
- 0x0300, 0x0000, 0x0004, 0x2000, 0x0001
-};
-static setword Q58[] = {
- 4,
- 0x0300, 0x0000, 0x0004, 0x2000
-};
 static setword Q59[] = {
- 3,
- 0x0000, 0x0000, 0x0080
+ 1,
+ 0x0300
 };
 static setword Q60[] = {
- 4,
- 0x0040, 0x0000, 0x0000, 0x0800
+ 1,
+ 0x0300
 };
 static setword Q61[] = {
  1,
- 0x0040
+ 0x0300
 };
 static setword Q62[] = {
- 3,
- 0x0080, 0x0000, 0x0001
+ 1,
+ 0x4380
 };
 static setword Q63[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x4000
+ 2,
+ 0x0020, 0x0040
 };
 static setword Q64[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x4010, 0x0C00, 0x000A
 };
 static setword Q65[] = {
- 4,
- 0x0000, 0x0000, 0x0004, 0x2000
+ 5,
+ 0x0300, 0x0000, 0x0004, 0x2000, 0x0001
 };
 static setword Q66[] = {
- 1,
- 0x0040
-};
-static setword Q67[] = {
- 2,
- 0x0000, 0x8000
-};
-static setword Q68[] = {
  4,
  0x0300, 0x0000, 0x0004, 0x2000
 };
-static setword Q69[] = {
+static setword Q67[] = {
+ 3,
+ 0x0000, 0x0000, 0x0080
+};
+static setword Q68[] = {
  4,
- 0x930C, 0x2001, 0x0834, 0x2000
+ 0x0040, 0x0000, 0x0000, 0x0800
+};
+static setword Q69[] = {
+ 1,
+ 0x0040
 };
 static setword Q70[] = {
- 4,
- 0x930C, 0x2001, 0x0834, 0x3000
+ 3,
+ 0x0080, 0x0000, 0x0001
 };
 static setword Q71[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x1800
+ 0x0000, 0x0000, 0x0000, 0x4000
 };
 static setword Q72[] = {
- 2,
- 0x0200, 0x0100
+ 3,
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q73[] = {
- 3,
- 0x0200, 0x0100, 0x3C80
+ 4,
+ 0x0000, 0x0000, 0x0004, 0x2000
 };
 static setword Q74[] = {
- 2,
- 0x0000, 0x0040
+ 1,
+ 0x0040
 };
 static setword Q75[] = {
- 4,
- 0x0000, 0x0000, 0x4FF0, 0x0008
+ 2,
+ 0x0000, 0x8000
 };
 static setword Q76[] = {
  4,
- 0x03E1, 0x80CA, 0xF005, 0xBFFE
+ 0x0300, 0x0000, 0x0004, 0x2000
 };
 static setword Q77[] = {
  4,
- 0x0000, 0x0030, 0x3F80, 0x001A
+ 0x930C, 0x2001, 0x0834, 0x2000
 };
 static setword Q78[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x0478
+ 0x930C, 0x2001, 0x0834, 0x3000
 };
 static setword Q79[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x0478
+ 0x0000, 0x0000, 0x0000, 0x1800
 };
 static setword Q80[] = {
- 1,
- 0x0C0C
+ 2,
+ 0x0200, 0x0100
 };
 static setword Q81[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x0200, 0x0100, 0x3C80
 };
 static setword Q82[] = {
- 5,
- 0x0000, 0x0000, 0x0000, 0x000B, 0x0001
-};
-static setword Q83[] = {
- 5,
- 0x03E1, 0x80CA, 0xF005, 0xFFFF, 0x0001
-};
-static setword Q84[] = {
- 4,
- 0x930C, 0x2001, 0x0834, 0x2000
-};
-static setword Q85[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1000
-};
-static setword Q86[] = {
- 4,
- 0x930C, 0x2001, 0x08B4, 0x2000
-};
-static setword Q87[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x2004
-};
-static setword Q88[] = {
- 3,
- 0x0000, 0x0000, 0x0800
-};
-static setword Q89[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1000
-};
-static setword Q90[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1002
-};
-static setword Q91[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x2004
-};
-static setword Q92[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x2006
-};
-static setword Q93[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x2004
-};
-static setword Q94[] = {
- 3,
- 0x0002, 0x0000, 0x0800
-};
-static setword Q95[] = {
- 3,
- 0x0000, 0x0000, 0x0800
-};
-static setword Q96[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1000
-};
-static setword Q97[] = {
- 3,
- 0x0000, 0x0000, 0x0800
-};
-static setword Q98[] = {
- 3,
- 0x4000, 0x0400, 0x0808
-};
-static setword Q99[] = {
- 3,
- 0x0002, 0x0000, 0x0800
-};
-static setword Q100[] = {
  2,
  0x0000, 0x0040
 };
-static setword Q101[] = {
+static setword Q83[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2010
+ 0x0000, 0x0000, 0x4FF0, 0x0008
 };
-static setword Q102[] = {
+static setword Q84[] = {
+ 4,
+ 0x03E1, 0x80CA, 0xF005, 0xBFFE
+};
+static setword Q85[] = {
+ 4,
+ 0x0000, 0x0030, 0x3F80, 0x001A
+};
+static setword Q86[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0478
+};
+static setword Q87[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0478
+};
+static setword Q88[] = {
+ 1,
+ 0x0C0C
+};
+static setword Q89[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
-static setword Q103[] = {
+static setword Q90[] = {
+ 5,
+ 0x0000, 0x0000, 0x0000, 0x000B, 0x0001
+};
+static setword Q91[] = {
+ 5,
+ 0x03E1, 0x80CA, 0xF005, 0xFFFF, 0x0001
+};
+static setword Q92[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2010
+ 0x930C, 0x2001, 0x0834, 0x2000
 };
-static setword Q104[] = {
- 3,
- 0x0000, 0x0000, 0x0800
-};
-static setword Q105[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0008
-};
-static setword Q106[] = {
+static setword Q93[] = {
  4,
  0x0000, 0x0000, 0x0000, 0x1000
 };
+static setword Q94[] = {
+ 4,
+ 0x930C, 0x2001, 0x08B4, 0x2000
+};
+static setword Q95[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2004
+};
+static setword Q96[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q97[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1000
+};
+static setword Q98[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1002
+};
+static setword Q99[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2004
+};
+static setword Q100[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2006
+};
+static setword Q101[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2004
+};
+static setword Q102[] = {
+ 3,
+ 0x0002, 0x0000, 0x0800
+};
+static setword Q103[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q104[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1000
+};
+static setword Q105[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q106[] = {
+ 3,
+ 0x4000, 0x0400, 0x0808
+};
 static setword Q107[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x0002, 0x0000, 0x0800
 };
 static setword Q108[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x8000
+ 2,
+ 0x0000, 0x0040
 };
 static setword Q109[] = {
- 3,
- 0x0000, 0x0000, 0x0800
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2010
 };
 static setword Q110[] = {
  3,
- 0x4004, 0x0400, 0x0040
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q111[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2000
+ 0x0000, 0x0000, 0x0000, 0x2010
 };
 static setword Q112[] = {
- 1,
- 0x2400
+ 3,
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q113[] = {
- 3,
- 0x4014, 0x0404, 0x000A
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0008
 };
 static setword Q114[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2000
+ 0x0000, 0x0000, 0x0000, 0x1000
 };
 static setword Q115[] = {
  3,
- 0x6414, 0x0404, 0x000A
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q116[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2000
+ 0x0000, 0x0000, 0x0000, 0x8000
 };
 static setword Q117[] = {
  3,
@@ -11055,273 +11448,307 @@ static setword Q117[] = {
 };
 static setword Q118[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x4004, 0x0400, 0x0040
 };
 static setword Q119[] = {
- 3,
- 0x4004, 0x0400, 0x0840
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2000
 };
 static setword Q120[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1800
+ 1,
+ 0x2400
 };
 static setword Q121[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x4014, 0x0404, 0x000A
 };
 static setword Q122[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x1800
+ 0x0000, 0x0000, 0x0000, 0x2000
 };
 static setword Q123[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x6414, 0x0404, 0x000A
 };
 static setword Q124[] = {
- 3,
- 0x4004, 0x0400, 0x0848
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2000
 };
 static setword Q125[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0020
+ 3,
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q126[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
 static setword Q127[] = {
- 2,
- 0x0000, 0x0040
+ 3,
+ 0x4004, 0x0400, 0x0840
 };
 static setword Q128[] = {
- 2,
- 0x0000, 0x0040
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1800
 };
 static setword Q129[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0010
-};
-static setword Q130[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0008
-};
-static setword Q131[] = {
- 4,
- 0x0200, 0x0000, 0x0000, 0x2004
-};
-static setword Q132[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
+static setword Q130[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1800
+};
+static setword Q131[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q132[] = {
+ 3,
+ 0x4004, 0x0400, 0x0848
+};
 static setword Q133[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x0004
+ 0x0000, 0x0000, 0x0000, 0x0020
 };
 static setword Q134[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
 static setword Q135[] = {
- 3,
- 0x0000, 0x0000, 0x3C80
-};
-static setword Q136[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x8000
-};
-static setword Q137[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x8000
-};
-static setword Q138[] = {
- 4,
- 0x0200, 0x0000, 0x0000, 0x2814
-};
-static setword Q139[] = {
- 2,
- 0x0802, 0x5000
-};
-static setword Q140[] = {
- 4,
- 0x0802, 0x5200, 0x3C80, 0x0003
-};
-static setword Q141[] = {
- 4,
- 0x0200, 0x0000, 0x0000, 0x2004
-};
-static setword Q142[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0002
-};
-static setword Q143[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1800
-};
-static setword Q144[] = {
  2,
  0x0000, 0x0040
 };
-static setword Q145[] = {
+static setword Q136[] = {
+ 2,
+ 0x0000, 0x0040
+};
+static setword Q137[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0010
+};
+static setword Q138[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0008
+};
+static setword Q139[] = {
+ 4,
+ 0x0200, 0x0000, 0x0000, 0x2004
+};
+static setword Q140[] = {
  3,
  0x0000, 0x0000, 0x0800
+};
+static setword Q141[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0004
+};
+static setword Q142[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q143[] = {
+ 3,
+ 0x0000, 0x0000, 0x3C80
+};
+static setword Q144[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x8000
+};
+static setword Q145[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x8000
 };
 static setword Q146[] = {
  4,
- 0x0000, 0x0040, 0x0000, 0x1000
+ 0x0200, 0x0000, 0x0000, 0x2814
 };
 static setword Q147[] = {
- 3,
- 0x0000, 0x0000, 0x0800
+ 2,
+ 0x0802, 0x5000
 };
 static setword Q148[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x1000
+ 0x0802, 0x5200, 0x3C80, 0x0003
 };
 static setword Q149[] = {
+ 4,
+ 0x0200, 0x0000, 0x0000, 0x2004
+};
+static setword Q150[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0002
+};
+static setword Q151[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1800
+};
+static setword Q152[] = {
+ 2,
+ 0x0000, 0x0040
+};
+static setword Q153[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q154[] = {
+ 4,
+ 0x0000, 0x0040, 0x0000, 0x1000
+};
+static setword Q155[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q156[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1000
+};
+static setword Q157[] = {
  3,
  0x0000, 0x0000, 0x0880
 };
-static setword Q150[] = {
+static setword Q158[] = {
  3,
  0x0000, 0x0000, 0x0980
 };
-static setword Q151[] = {
+static setword Q159[] = {
  3,
  0x0000, 0x0000, 0x3000
 };
-static setword Q152[] = {
+static setword Q160[] = {
  3,
  0x4004, 0x0400, 0x084A
 };
-static setword Q153[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x2000
-};
-static setword Q154[] = {
- 3,
- 0x0000, 0x0000, 0x3F80
-};
-static setword Q155[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0020
-};
-static setword Q156[] = {
- 3,
- 0x0000, 0x0000, 0x0800
-};
-static setword Q157[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1824
-};
-static setword Q158[] = {
- 3,
- 0x0000, 0x0000, 0x0800
-};
-static setword Q159[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x1824
-};
-static setword Q160[] = {
- 3,
- 0x4014, 0x0400, 0x000A
-};
 static setword Q161[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2800
+ 0x0000, 0x0000, 0x0000, 0x2000
 };
 static setword Q162[] = {
  3,
- 0x0000, 0x0000, 0x0080
+ 0x0000, 0x0000, 0x3F80
 };
 static setword Q163[] = {
- 3,
- 0x0000, 0x0000, 0x0040
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0020
 };
 static setword Q164[] = {
- 4,
- 0x0000, 0x0000, 0x0040, 0x2000
-};
-static setword Q165[] = {
- 3,
- 0x0000, 0x0000, 0x0040
-};
-static setword Q166[] = {
- 5,
- 0x0000, 0x0000, 0x0000, 0x0000, 0x0001
-};
-static setword Q167[] = {
- 3,
- 0x4014, 0x0404, 0x000A
-};
-static setword Q168[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x2000
-};
-static setword Q169[] = {
  3,
  0x0000, 0x0000, 0x0800
 };
-static setword Q170[] = {
+static setword Q165[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x2002
+ 0x0000, 0x0000, 0x0000, 0x1824
+};
+static setword Q166[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q167[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x1824
+};
+static setword Q168[] = {
+ 3,
+ 0x4014, 0x0400, 0x000A
+};
+static setword Q169[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2800
+};
+static setword Q170[] = {
+ 3,
+ 0x0000, 0x0000, 0x0080
 };
 static setword Q171[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x0000, 0x0000, 0x0040
 };
 static setword Q172[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x0804
+ 0x0000, 0x0000, 0x0040, 0x2000
 };
 static setword Q173[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x0000, 0x0000, 0x0040
 };
 static setword Q174[] = {
- 4,
- 0x0000, 0x0000, 0x0000, 0x0804
+ 5,
+ 0x0000, 0x0000, 0x0000, 0x0000, 0x0001
 };
 static setword Q175[] = {
  3,
- 0x0000, 0x0000, 0x0800
+ 0x4014, 0x0404, 0x000A
 };
 static setword Q176[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x0804
+ 0x0000, 0x0000, 0x0000, 0x2000
 };
 static setword Q177[] = {
  3,
- 0x0004, 0x0000, 0x0040
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q178[] = {
- 1,
- 0x0018
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x2002
 };
 static setword Q179[] = {
- 1,
- 0x00C0
+ 3,
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q180[] = {
- 1,
- 0x001A
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0804
 };
 static setword Q181[] = {
- 1,
- 0x001E
+ 3,
+ 0x0000, 0x0000, 0x0800
 };
 static setword Q182[] = {
  4,
- 0x0000, 0x0000, 0x0000, 0x0478
+ 0x0000, 0x0000, 0x0000, 0x0804
 };
 static setword Q183[] = {
+ 3,
+ 0x0000, 0x0000, 0x0800
+};
+static setword Q184[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0804
+};
+static setword Q185[] = {
+ 3,
+ 0x0004, 0x0000, 0x0040
+};
+static setword Q186[] = {
+ 1,
+ 0x0018
+};
+static setword Q187[] = {
+ 1,
+ 0x00C0
+};
+static setword Q188[] = {
+ 1,
+ 0x001A
+};
+static setword Q189[] = {
+ 1,
+ 0x001E
+};
+static setword Q190[] = {
+ 4,
+ 0x0000, 0x0000, 0x0000, 0x0478
+};
+static setword Q191[] = {
  1,
  0x001F
 };
-static setword Q184[] = {
+static setword Q192[] = {
  1,
  0x1FE7
 };
 static setword *Conset[] = {
+ Q192, Q191,
+ Q190, Q189, Q188, Q187, Q186, Q185,
  Q184, Q183, Q182, Q181, Q180, Q179,
  Q178, Q177, Q176, Q175, Q174, Q173,
  Q172, Q171, Q170, Q169, Q168, Q167,

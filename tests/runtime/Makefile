@@ -10,6 +10,10 @@ VALID   = 05_valid
 
 all: $(addsuffix .pass, $(TESTS)) $(addsuffix .pass, $(VALID))
 
+.PHONY: portable
+portable:
+	PTC=$(abspath $(PTC)) CC='$(CC)' python3 run.py
+
 # Tests expected to exit non-zero and print a Fatal message to stderr
 $(addsuffix .pass, $(TESTS)): %.pass: %.p
 	$(PTC) -r < $< > $*.c

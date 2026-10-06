@@ -1,10 +1,11 @@
 #!/bin/sh
 set -eu
 
-PTC=${PTC:-../ptc}
+testdir=$(dirname "$0")
+PTC=${PTC:-$testdir/../ptc}
 failed=0
 
-for source in ./*.p; do
+for source in "$testdir"/*.p; do
     output=${source%.p}.c
     diagnostics=${source%.p}.err
     if "$PTC" < "$source" > "$output" 2> "$diagnostics"; then

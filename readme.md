@@ -22,7 +22,7 @@ To build a compiler directly from the generated C source:
 make bootstrap
 ```
 
-This produces `ptc-new`.
+This produces `ptc`.
 
 To perform the full self-hosting build and comparison:
 
@@ -39,6 +39,11 @@ ptc-new.c        --C compiler-->  ptc-new
 ```
 
 It then prints checksums for the generated C files and compiler executables.
+
+The maintained compiler source of truth is `modified/ptc.p`. After editing it,
+run `make update-bootstrap`: this bootstraps through three translations and
+compares the last two before updating `generated/ptc.c`. `make verify` checks
+that the checked-in C regenerates exactly and builds identical executables.
 
 The generated compiler source uses C89-style C and is built with:
 
@@ -82,7 +87,93 @@ program Example(input, output);
 
 The generated C includes the runtime definitions it needs. The old `ptc_runtime.h` compatibility header is no longer required.
 
+### Optional checks and small targets
+
+Options can be combined in any order:
+
+| Option | Purpose |
+|---|---|
+| `-r` | Emit nil-pointer and array-index checks into the generated C. |
+| `-e` | Enable those checks, but link their implementation from `runtime/ptc_checks.c`. |
+| `-m` | Minimize implicit C-library requirements; return from `main`, copy string literals locally, and use a library-free failure handler. |
+| `-c` | Use the optional character-console backend for Pascal I/O; implies `-m`. |
+| `-i16` | Target a 16-bit C `int`; set `maxint` to 32767 and use native `int` for 16-bit subranges. |
+
+For a hosted program with generated checks:
+
+```sh
+./ptc -r < program.p > program.c
+cc -std=c89 -o program program.c
+```
+
+To link one shared check implementation for several translated files:
+
+```sh
+./ptc -e < program.p > program.c
+cc -std=c89 -Iruntime -o program program.c runtime/ptc_checks.c
+```
+
+For a small-target program using hardware helpers instead of Pascal file I/O:
+
+```sh
+./ptc -m -i16 < program.p > program.c
+```
+
+`-m` does not silently replace language features: `writeln` still requires
+stdio, `new` still requires allocation, string comparison still uses `strncmp`,
+and Pascal files and sets still use their existing support. Scalar logic,
+arrays, records, pointer access, ordinary routines, and hardware calls can use
+no C library at all. The target C compiler still supplies its startup, stack,
+and any arithmetic helper routines.
+
+For console I/O without the full stdio/file runtime, select `-c`:
+
+```sh
+./ptc -c < program.p > program.c
+cc -std=c89 -Iruntime -o program program.c \
+    runtime/ptc_console_input.c runtime/ptc_console_output.c \
+    runtime/ptc_console_host.c
+```
+
+Characters, native integers, booleans, strings/character arrays, field widths,
+and buffered `read`/`readln` work through small helpers. The target adapter alone
+includes system headers. Omit unused input/output helpers, and use `-c -i16`
+for OSDK or cc65. See [the runtime interface](runtime/README.md) and
+[the three-target console demo](examples/console/README.md).
+
+Checks do not require signals, allocation, or a global initialization call.
+In minimal mode, a failed check stops in an infinite loop. Define
+`PTC_CUSTOM_FAIL` when compiling C and supply a non-returning `void PtcFail(int)`
+to display a message, return to a monitor, or halt differently. For linked
+checks, also compile the runtime with `PTC_MINIMAL` or `PTC_CUSTOM_FAIL`;
+translator options cannot configure a separately compiled C file. See
+[LANGUAGE.md](LANGUAGE.md#16-runtime-safety-checks) for the exact contract.
+
+### Useful examples
+
+- [Console demo](examples/console/README.md): ordinary Pascal `readln`/`writeln`
+  built for a host, cc65 Atmos, or OSDK with a replaceable adapter.
+
+- [Oric LORES demo](examples/oric/lores/README.md): a separately translated
+  Pascal drawing library, a moving coloured cell, and a small C hardware bridge.
+  Builds using either cc65 or OSDK.
+- [Modern examples](examples/modern/README.md): a text-statistics filter and a
+  binary Fletcher-16 checksum tool, usable in ordinary shell pipelines.
+- `examples/separate_compilation/`: link several Pascal translations with C's
+  linker; a real Pascal module system is not required for this pattern.
+
+The OSDK compiler tools alone are insufficient to build a runnable tape: its
+macro definitions, startup code, and library index are also needed. The LORES
+instructions show both a compiler-only stage and a complete tape build.
+
 ## Testing
+
+Run the self-hosting check, semantic rejection tests, runtime-mode tests, and
+hosted example checks together:
+
+```sh
+make check
+```
 
 To translate and compile the included test program:
 
@@ -90,7 +181,7 @@ To translate and compile the included test program:
 make test
 ```
 
-The test target uses the self-hosted compiler to translate `test.pas`, compiles the resulting `test.c`, and creates the `test` executable.
+The test target uses the bootstrapped compiler to translate `test.pas`, compiles the resulting `test.c`, and runs the `test` executable.
 
 Run it with:
 
@@ -159,4 +250,3 @@ Electronic mail contact: `username: norayr; domain: arnet.am`
 ## No warranty
 
 The maintained files are provided for historical and educational purposes, without any promise that they are correct, safe or suitable for a particular purpose.
-

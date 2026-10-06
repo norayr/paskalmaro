@@ -693,7 +693,8 @@ type
                 efunrtype,       eindex,         enotrecord,     enotpointer,
                 eforctrl,        eboolxp,        ecasetype,      edupcase,
                 enofunresult,    eprocexpr,      eidkind,        etypeexpected,
-                econstexpected,  ecalltarget,    efuncstmt,      ebadrange
+                econstexpected,  ecalltarget,    efuncstmt,      ebadrange,
+                econsolefile,    econsoletype,   econsoleop
         );
 
         machdefstr = packed array [ 1 .. machdeflen ] of char;
@@ -723,6 +724,13 @@ var
         usenilp,                (* source program uses nil-pointer      *)
         usebool,                (* source program writes boolean-values *)
         runtimechecks : boolean; (* emit runtime safety checks in output *)
+
+        minimal,                (* avoid implicit hosted-library needs  *)
+        externalchecks,         (* link checks instead of emitting them *)
+        target16,               (* target has a 16-bit C int            *)
+        consoleio,              (* link portable character console I/O *)
+        usestrcopy, usealignstrings : boolean;
+        targetmaxint, argi : integer;
 
         argbuf  : toknbuf;      (* temp buffer for argv                 *)
 
@@ -896,6 +904,12 @@ begin
                 message(user, 'Function call used as a statement');
           ebadrange:
                 message(user, 'Invalid subrange bounds');
+          econsolefile:
+                message(restr, 'Console backend supports only standard input/output');
+          econsoletype:
+                message(restr, 'Unsupported console I/O type, format or integer range');
+          econsoleop:
+                message(restr, 'Operation is not supported by console backend');
         end;(* case *)
         if lastline <> 0 then
             begin
@@ -4121,6 +4135,8 @@ var     assigned        : boolean;
                         identicaltype := sametype(ta^.tcelem, tb^.taelem)
                 else if (ta^.tt = narray) and (tb^.tt = nconfarr) then
                         identicaltype := sametype(ta^.taelem, tb^.tcelem)
+                else if (ta^.tt = nconfarr) and (tb^.tt = nconfarr) then
+                        identicaltype := sametype(ta^.tcelem, tb^.tcelem)
                 else
                         identicaltype := false
         end;
@@ -4430,6 +4446,64 @@ var     assigned        : boolean;
                 tq      : treeptr;
                 n       : integer;
 
+                procedure consolestream(tp : treeptr; stream : predefs);
+                begin
+                        if tp <> nil then
+                            begin
+                                if tp^.tt <> nid then semerror(tp, econsolefile);
+                                if tp^.tsym <> defnams[stream] then
+                                        semerror(tp, econsolefile)
+                            end
+                end;
+
+                procedure consolevalue(tp : treeptr; reading : boolean);
+                var     tq, tb : treeptr;
+                        lo, hi : integer;
+                begin
+                        if tp^.tt = nformat then
+                            begin
+                                if reading or (tp^.texpl^.tt = nformat) then
+                                        semerror(tp, econsoletype);
+                                if constant(tp^.texpr) then
+                                        if (cvalof(tp^.texpr) < 0) or
+                                           (cvalof(tp^.texpr) > targetmaxint) then
+                                                semerror(tp, econsoletype);
+                                consolevalue(tp^.texpr, false);
+                                tp := tp^.texpl
+                            end;
+                        tq := typeof(tp);
+                        tb := basetype(tp);
+                        if not ((tb = typnods[tinteger]) or
+                                (tb = typnods[tchar]) or
+                                ((tb = typnods[tboolean]) and not reading) or
+                                ((tq = typnods[tstring]) and not reading) or
+                                chararray(tp)) then
+                                semerror(tp, econsoletype);
+                        if target16 and (tb = typnods[tinteger]) then
+                            begin
+                                if tq^.tt = nsubrange then
+                                    begin
+                                        lo := cvalof(tq^.tlo);
+                                        hi := cvalof(tq^.thi);
+                                        if (lo < -32768) or (hi > 65535) or
+                                           ((lo < 0) and (hi > 32767)) then
+                                                semerror(tp, econsoletype)
+                                    end
+                                else if constant(tp) then
+                                        if (cvalof(tp) < -32768) or
+                                           (cvalof(tp) > 32767) then
+                                                semerror(tp, econsoletype)
+                            end;
+                        if target16 and (tq^.tt = narray) then
+                            begin
+                                tb := typeof(tq^.taindx);
+                                if tb^.tt = nsubrange then
+                                        if cvalof(tb^.thi) - cvalof(tb^.tlo) + 1 >
+                                           targetmaxint then
+                                                semerror(tp, econsoletype)
+                            end
+                end;
+
         begin
                 a := cp^.taparm;
                 n := argcount(a);
@@ -4633,7 +4707,35 @@ var     assigned        : boolean;
                                 tq := tq^.tnext
                             end
                     end
-                end
+                end;
+                if consoleio then
+                    begin
+                        case pd of
+                          deof, deoln: consolestream(a, dinput);
+                          dflush, dpage: consolestream(a, doutput);
+                          dget, dput, dclose, dreset, drewrite:
+                                semerror(cp, econsoleop);
+                          dread, dreadln, dwrite, dwriteln, dmessage:
+                            begin
+                                tq := a;
+                                if (tq <> nil) and (pd <> dmessage) then
+                                        if filetype(tq) then
+                                            begin
+                                                if pd in [dread, dreadln] then
+                                                        consolestream(tq, dinput)
+                                                else
+                                                        consolestream(tq, doutput);
+                                                tq := tq^.tnext
+                                            end;
+                                while tq <> nil do
+                                    begin
+                                        consolevalue(tq, pd in [dread, dreadln]);
+                                        tq := tq^.tnext
+                                    end
+                            end;
+                          otherwise
+                        end
+                    end
         end;
 
         procedure checkcall(cp, fn : treeptr; expression : boolean);
@@ -4880,6 +4982,9 @@ var     assigned        : boolean;
                     begin
                         checkexpr(tp^.texps, fn);
                         tq := typeof(tp^.texps);
+                        if consoleio and ((tq^.tt = nfileof) or
+                                          (tq = typnods[ttext])) then
+                                semerror(tp, econsoleop);
                         if not ((tq^.tt = nptr) or
                                 (tq^.tt = nfileof) or
                                 (tq = typnods[ttext])) then
@@ -4916,7 +5021,8 @@ var     assigned        : boolean;
                                         checktype(tq^.tbind)
                                     end;
                                   npredef:
-                                        (* no op *);
+                                        if consoleio and (tp^.tdef = dtext) then
+                                                semerror(tp, econsolefile);
                                   nptr:
                                         checktype(tp^.tptrid);
                                   nscalar:
@@ -4955,7 +5061,10 @@ var     assigned        : boolean;
                                                 semerror(tp, eoperand)
                                     end;
                                   nfileof:
-                                        checktype(tp^.tof);
+                                    begin
+                                        if consoleio then semerror(tp, econsolefile);
+                                        checktype(tp^.tof)
+                                    end;
                                   nrecord:
                                     begin
                                         tq := tp^.tflist;
@@ -5125,6 +5234,8 @@ var     assigned        : boolean;
                           nassign:
                             begin
                                 checkexpr(tp^.trhs, fn);
+                                if consoleio and filetype(tp^.tlhs) then
+                                        semerror(tp, econsoleop);
                                 if functionresult(tp^.tlhs, fn) then
                                     begin
                                         if not assignable(fn^.tfuntyp,
@@ -5238,6 +5349,8 @@ var     assigned        : boolean;
         end;
 
 begin   (* semcheck *)
+        if consoleio and (top^.tsubpar <> nil) then
+                semerror(top, econsolefile);
         checkconstants(top^.tsubconst, top);
         checktypedecls(top^.tsubtype);
         checktypedecls(top^.tsubvar);
@@ -5309,7 +5422,7 @@ begin
         else if tq = typnods[tchar] then
                 clower := 0
         else if tq = typnods[tinteger] then
-                clower := -maxint
+                clower := -targetmaxint
         else
                 fatal(etree)
 end;    (* clower *)
@@ -5341,7 +5454,7 @@ begin
         else if tq = typnods[tchar] then
                 cupper := maxchar
         else if tq = typnods[tinteger] then
-                cupper := maxint
+                cupper := targetmaxint
         else
                 fatal(etree)
 end;    (* cupper *)
@@ -6173,6 +6286,8 @@ procedure transform;
 
                           nassign:
                             begin
+                                if typeof(tp^.trhs) = typnods[tstring] then
+                                        usestrcopy := true;
                                 global(tp^.tlhs, dp, depend);
                                 global(tp^.trhs, dp, depend)
                             end;
@@ -6194,6 +6309,17 @@ procedure transform;
                           ncall:
                             begin
                                 global(tp^.tcall, dp, depend);
+                                ip := tp^.taparm;
+                                while ip <> nil do
+                                    begin
+                                        if typeof(ip) = typnods[tstring] then
+                                                if not (consoleio and
+                                                   ((tp^.tcall^.tsym = defnams[dwrite]) or
+                                                    (tp^.tcall^.tsym = defnams[dwriteln]) or
+                                                    (tp^.tcall^.tsym = defnams[dmessage]))) then
+                                                        usealignstrings := true;
+                                        ip := ip^.tnext
+                                    end;
                                 global(tp^.taparm, dp, depend)
                             end;
                           nid:
@@ -6614,7 +6740,7 @@ var     conflag,
         (*      Emit code for call to a predefined function/procedure.  *)
         procedure epredef(ts, tp : treeptr);
 
-        label   444, 555;
+        label   444, 555, 999;
 
         var     tq,
                 tv, tx  : treeptr;
@@ -7097,8 +7223,127 @@ var     conflag,
                              end
                 end;    (* newsize *)
 
+                (* Console calls use scalar helpers, not stdio format strings. *)
+                procedure econsole;
+
+                var     item, value, width, typ : treeptr;
+                        letter : char;
+
+                        procedure arraydata(value, typ : treeptr);
+                        begin
+                                eexpr(value);
+                                if typ^.tt = narray then write('.A');
+                                write(', ');
+                                if typ^.tt = narray then
+                                        write(crange(typ^.taindx):1)
+                                else
+                                        printid(typ^.tcindx^.thi^.tsym^.lid)
+                        end;
+
+                begin
+                        if td = deof then write('PtcConsoleEof()')
+                        else if td = deoln then write('PtcConsoleEoln()')
+                        else if td = dflush then writeln('PtcFlush();')
+                        else if td = dpage then writeln('PtcPutChar(12);')
+                        else begin
+                                item := tp^.taparm;
+                                if (item <> nil) and (td <> dmessage) then
+                                        if typeof(item) = typnods[ttext] then
+                                                item := item^.tnext;
+                                writeln('{');
+                                increment;
+                                while item <> nil do
+                                    begin
+                                        width := nil;
+                                        value := item;
+                                        if item^.tt = nformat then
+                                            begin
+                                                width := item^.texpr;
+                                                value := item^.texpl
+                                            end;
+                                        typ := typeof(value);
+                                        letter := typeletter(value);
+                                        indent;
+                                        if td in [dread, dreadln] then
+                                            begin
+                                                if letter in ['a', 'v'] then
+                                                    begin
+                                                        write('PtcReadWord(');
+                                                        arraydata(value, typ);
+                                                        write(')')
+                                                    end
+                                                else begin
+                                                        eexpr(value);
+                                                        write(' = ');
+                                                        if letter = 'c' then
+                                                                write('PtcReadChar()')
+                                                        else if typ^.tt = nsubrange then
+                                                            begin
+                                                                if clower(typ) >= 0 then
+                                                                        write('PtcReadUInt(')
+                                                                else
+                                                                        write('PtcReadSigned(');
+                                                                write(clower(typ):1, ', ',
+                                                                      cupper(typ):1, ')')
+                                                            end
+                                                        else
+                                                                write('PtcReadInt()')
+                                                     end
+                                            end
+                                        else begin
+                                                case letter of
+                                                  'c': write('PtcWriteChar(');
+                                                  'b': write('PtcWriteBool(');
+                                                  's', 'a', 'v': write('PtcWriteText(');
+                                                  'd':
+                                                        if (typ^.tt = nsubrange) and
+                                                           (clower(typ) >= 0) then
+                                                                write('PtcWriteUInt(')
+                                                        else
+                                                                write('PtcWriteInt(')
+                                                end;
+                                                if letter in ['a', 'v'] then
+                                                        arraydata(value, typ)
+                                                else begin
+                                                        eexpr(value);
+                                                        if letter = 's' then write(', -1')
+                                                     end;
+                                                write(', ');
+                                                if width <> nil then
+                                                    begin
+                                                        write('(int)(');
+                                                        eexpr(width);
+                                                        write(')')
+                                                    end
+                                                else if letter = 'd' then
+                                                        write(intlen:1)
+                                                else
+                                                        write('0');
+                                                write(')')
+                                             end;
+                                        writeln(';');
+                                        item := item^.tnext
+                                    end;
+                                if td in [dwriteln, dmessage, dreadln] then
+                                    begin
+                                        indent;
+                                        if td = dreadln then writeln('PtcReadLn();')
+                                        else writeln('PtcPutChar(10);')
+                                    end;
+                                decrement;
+                                indent;
+                                writeln('}')
+                             end
+                end;
+
         begin   (* epredef *)
                 td := ts^.tsubstmt^.tdef;
+                if consoleio and (td in [deof, deoln, dflush, dpage,
+                                        dread, dreadln, dwrite, dwriteln, dmessage]) then
+                    begin
+                        econsole;
+                        goto 999
+                    end;
                 case td of
                   dabs:
                     begin
@@ -7787,9 +8032,12 @@ var     conflag,
                         indent;
                         write(tab1);
                         eexpr(tp^.taparm^.tnext^.tnext);
-                        write('.A[_j++] = ');
+                        if typeof(tp^.taparm^.tnext^.tnext)^.tt = narray then
+                                write('.A');
+                        write('[_j++] = ');
                         eexpr(tp^.taparm);
-                        writeln('.A[_i++];');
+                        if tq^.tt = narray then write('.A');
+                        writeln('[_i++];');
                         indent;
                         writeln('}')
                     end;
@@ -7818,13 +8066,16 @@ var     conflag,
                         indent;
                         write(tab1);
                         eexpr(tp^.taparm^.tnext);
-                        write('.A[_i++] = ');
+                        if tx^.tt = narray then write('.A');
+                        write('[_i++] = ');
                         eexpr(tp^.taparm);
-                        writeln('.A[_j++];');
+                        if tq^.tt = narray then write('.A');
+                        writeln('[_j++];');
                         indent;
                         writeln('}')
                     end;
-                end (* case *)
+                end; (* case *)
+        999:
         end;    (* epredef *)
 
         procedure eaddr(tp : treeptr);
@@ -7941,23 +8192,36 @@ var     conflag,
                                     end
                                 else if tf^.tup^.tbind^.tt = nconfarr then
                                     begin
-                                        write('(struct ');
-                                        printid(tf^.tup^.tbind^.tcuid);
-                                        write(' *)&');
                                         eexpr(tq);
+                                        if tx^.tt = narray then write('.A');
                                         (* add upper bound of actual value *)
-                                        if tq^.tnext = nil then
+                                        if tf^.tnext = nil then
                                             begin
-                                                write(', (');
-                                                eexpr(tx^.taindx^.thi);
-                                                write(' - ');
-                                                eexpr(tx^.taindx^.tlo);
-                                                write(' + 1)')
+                                                write(', ');
+                                                if tx^.tt = nconfarr then
+                                                        printid(tx^.tcindx^.thi^.tsym^.lid)
+                                                else begin
+                                                        write('(');
+                                                        eexpr(tx^.taindx^.thi);
+                                                        write(' - ');
+                                                        eexpr(tx^.taindx^.tlo);
+                                                        write(' + 1)')
+                                                     end
                                             end
                                     end
                                 else begin
                                         if tf^.tup^.tt = nvarpar then
                                                 eaddr(tq)
+                                        else if target16 and
+                                                ((typeof(tf) = typnods[tinteger]) or
+                                                 (typeof(tf)^.tt = nsubrange)) then
+                                            begin
+                                                write('(');
+                                                etypedef(tf^.tup^.tbind);
+                                                write(')(');
+                                                eexpr(tq);
+                                                write(')')
+                                            end
                                         else
                                                 eexpr(tq)
                                      end
@@ -8240,7 +8504,10 @@ var     conflag,
                         tq := typeof(tp^.trhs);
                         if tq = typnods[tstring] then
                             begin
-                                write(voidcast, 'strncpy(');
+                                if minimal then
+                                        write('PtcCopy(')
+                                else
+                                        write(voidcast, 'strncpy(');
                                 eexpr(tp^.tlhs);
                                 write('.A, ');
                                 eexpr(tp^.trhs);
@@ -8322,9 +8589,16 @@ var     conflag,
                     end;
                   nindex:
                     begin
-                        eselect(tp^.tvariable);
-                        write('A[');
                         tq := typeof(tp^.tvariable);
+                        if tq^.tt = nconfarr then
+                            begin
+                                eexpr(tp^.tvariable);
+                                write('[')
+                            end
+                        else begin
+                                eselect(tp^.tvariable);
+                                write('A[')
+                             end;
                         if runtimechecks and (tq^.tt = narray) then
                             begin
                                 (* static array: bounds are compile-time constants *)
@@ -8399,21 +8673,29 @@ var     conflag,
                             begin
                                 doarrow := false;
                                 if runtimechecks then
-                                        write('Chknil(');
+                                    begin
+                                        write('((');
+                                        etypedef(tq);
+                                        write(')Chknil(')
+                                    end;
                                 eexpr(tp^.texps);
                                 if runtimechecks then
-                                        write(')');
+                                        write('))');
                                 write('->');
                                 donearr := true
                             end
                         else begin
                                 if runtimechecks then
-                                        write('(*Chknil(')
+                                    begin
+                                        write('(*((');
+                                        etypedef(tq);
+                                        write(')Chknil(')
+                                    end
                                 else
                                         write('(*');
                                 eexpr(tp^.texps);
                                 if runtimechecks then
-                                        write('))')
+                                        write(')))')
                                 else
                                         write(')')
                              end
@@ -8423,7 +8705,10 @@ var     conflag,
                         (* add pointer-dereference if this id is declared as a
                            var-parameter or as a procedure-parameter *)
                         tq := idup(tp);
-                        if tq^.tt = nvarpar then
+                        if (tq^.tt = nvarpar) and
+                           (typeof(tp)^.tt = nconfarr) then
+                                printid(tp^.tsym^.lid)
+                        else if tq^.tt = nvarpar then
                                 if doarrow then
                                     begin
                                         doarrow := false;
@@ -8821,11 +9106,7 @@ var     conflag,
                             end;
                           nconfarr:
                             begin
-                                write('struct ');
-                                printid(tp^.tcuid);
-                                write(' { ');
-                                etdef(nil, tp^.tcelem);
-                                write(tab1, 'A[]; }')
+                                etdef(nil, tp^.tcelem)
                             end;
                           narray:
                             begin
@@ -9748,32 +10029,63 @@ var     conflag,
                         write('**       Code derived from program ');
                         printid(tp^.tsubid^.tsym^.lid);
                         writeln;
-                        writeln('*', '/');
-                        writeln(include, '<stdlib.h>')  (* LIB *)
+                        writeln('*', '/')
                     end;
-                if runtimechecks then
+                if (not minimal and (tp^.tsubid <> nil)) or
+                   use(dnew) or use(ddispose) or use(dhalt) or use(dexit) or
+                   use(dreset) or use(drewrite) or usesets or
+                   (not consoleio and (use(dread) or use(dreadln))) or
+                   (not minimal and (runtimechecks or usecase or usejmps or usesets)) then
+                        writeln(include, '<stdlib.h>');
+                if externalchecks then
+                        writeln(include, '"ptc_checks.h"')
+                else if runtimechecks or (minimal and (usecase or usejmps)) then
                     begin
                         writeln('/', '*');
                         writeln('**     Runtime check support');
                         writeln('*', '/');
-                        writeln(include, '<signal.h>');
-                        writeln(include, '<stdio.h>');
-                        writeln(define,
-                            'Chknil(p) ((p)?(p):(fprintf(stderr,',
-                            '"Fatal: nil pointer dereference\n"),exit(1),(p)))');
-                        writeln(define,
-                            'Chkidx(i,l,h) ((i)>=(l)&&(i)<=(h)?(i):(fprintf(stderr,',
-                            '"Fatal: array index %d not in [%d,%d]\n",(i),(l),(h)),exit(1),(i)))');
-                        writeln(static, voidtyp);
-                        writeln('Pasjmp(s)');
-                        writeln(inttyp, tab1, 's;');
+                        if not minimal then
+                                writeln(include, '<stdio.h>');
+                        writeln(ifdef, 'PTC_CUSTOM_FAIL');
+                        writeln('extern void PtcFail(int);');
+                        writeln(elsif);
+                        writeln('static void PtcFail(int code)');
                         writeln('{');
-                        writeln(tab1, voidcast,
-                            'fprintf(stderr,"Fatal: memory access violation\n");');
-                        writeln(tab1, 'exit(1);');
-                        writeln('}')
+                        if minimal then
+                            begin
+                                writeln(tab1, '(void)code;');
+                                writeln(tab1, 'for (;;) ;')
+                            end
+                        else begin
+                                writeln(tab1, 'fprintf(stderr, "Fatal: %s\n",');
+                                writeln(tab2, 'code == 1 ? "nil pointer dereference" :');
+                                writeln(tab2, 'code == 2 ? "array index out of bounds" :');
+                                writeln(tab2, '"missing case limb");');
+                                writeln(tab1, 'exit(1);')
+                             end;
+                        writeln('}');
+                        writeln(endif);
+                        if runtimechecks then
+                            begin
+                                writeln('static void *Chknil(void *p)');
+                                writeln('{');
+                                writeln(tab1, 'if (!p) PtcFail(1);');
+                                writeln(tab1, 'return p;');
+                                writeln('}');
+                                writeln('static int Chkidx(int i, int lo, int hi)');
+                                writeln('{');
+                                writeln(tab1, 'if (i < lo || i > hi) PtcFail(2);');
+                                writeln(tab1, 'return i;');
+                                writeln('}')
+                            end
                     end;
-                if usecase or usesets or
+                if consoleio then
+                        writeln(include, '"ptc_console.h"');
+                if consoleio and usesets then
+                        writeln(include, '<stdio.h>');
+                if not consoleio then
+                    begin
+                if (usecase and not minimal) or usesets or
                    use(dinput) or use(doutput) or
                    use(dwrite) or use(dwriteln) or use(dmessage) or
                    use(deof) or use(deoln) or use(dflush) or use(dpage) or
@@ -9917,6 +10229,7 @@ var     conflag,
                         writeln(define, maxfilename, ' ', (maxtoknlen+1):1);
                         writeln(endif)
                     end;
+                    end; (* hosted file and text support *)
                 if usecase or usejmps then
                     begin
                         writeln('/', '*');
@@ -9969,7 +10282,8 @@ var     conflag,
                         write(' (');
                         printid(defnams[dboolean]^.lid);
                         writeln(')1');
-                        writeln(static, chartyp, tab1, '*Bools[];')
+                        if not consoleio then
+                                writeln(static, chartyp, tab1, '*Bools[2];')
                     end;
                 capital(defnams[dinteger]);
                 if use(dinteger) then
@@ -9979,7 +10293,7 @@ var     conflag,
                         writeln(';')
                     end;
                 if use(dmaxint) then
-                        writeln(define, 'maxint', tab1, maxint:1);
+                        writeln(define, 'maxint', tab1, targetmaxint:1);
                 capital(defnams[dreal]);
                 if use(dreal) then
                     begin
@@ -10020,10 +10334,6 @@ var     conflag,
                     end;
                 if usenilp then
                         writeln(define, 'NIL 0');               (* CPU *)
-                if (tp^.tsubid = nil) and
-                   (use(dnew) or use(ddispose) or use(dhalt) or use(dexit) or
-                    use(dreset) or use(drewrite)) then
-                        writeln(include, '<stdlib.h>');  (* LIB *)
                 if use(dreset) or use(drewrite) then
                     begin
                         writeln(include, '<string.h>');  (* LIB *)
@@ -10052,7 +10362,7 @@ var     conflag,
                         writeln(static, setptyp, tab1, 'Conset[];');
                         writeln(static, voidtyp, tab1, 'Setncpy();')
                     end;
-                if align then                                   (* CPU *)
+                if align and (not minimal or usesets or usealignstrings) then (* CPU *)
                     begin
                         writeln(ifndef, 'SETALIGN');
                         writeln(define, 'SETALIGN(x) Alignset(x)');
@@ -10067,7 +10377,18 @@ var     conflag,
                                         maxtoknlen:1, '+1]; } *Alignstr();');
                         writeln(endif)
                     end;
-                writeln(xtern, chartyp, ' *strncpy();');        (* LIB *)
+                if minimal and usestrcopy then
+                    begin
+                        writeln('static void PtcCopy(char *d, char *s, unsigned int n)');
+                        writeln('{');
+                        writeln(tab1, 'while (n--) {');
+                        writeln(tab2, '*d++ = *s;');
+                        writeln(tab2, 'if (*s) s++;');
+                        writeln(tab1, '}');
+                        writeln('}')
+                    end
+                else if not minimal then
+                        writeln(xtern, chartyp, ' *strncpy();'); (* LIB *)
                 if use(dargc) or use(dargv) then
                     begin
                         writeln('/', '*');
@@ -10110,6 +10431,7 @@ var     conflag,
                         writeln('*', '/');
                         if use(dargc) or use(dargv) then
                             begin
+                                if minimal then write('int ');
                                 writeln('main(_ac, _av)');      (* OS *)
                                 writeln(inttyp, tab1, '_ac;');
                                 writeln(chartyp, tab1, '*_av[];');
@@ -10119,17 +10441,17 @@ var     conflag,
                                 writeln(tab1, 'argv = _av;')
                             end
                         else begin
-                                writeln('main()');
+                                if minimal then
+                                        writeln('int main(void)')
+                                else
+                                        writeln('main()');
                                 writeln('{')
                              end;
-                        if runtimechecks then
-                                writeln(tab1,
-                                    '(void)signal(SIGSEGV, Pasjmp);');
-                        if use(dinput) then
+                        if use(dinput) and not consoleio then
                                 writeln(tab1, 'input.fp = stdin;');
-                        if use(doutput) then
+                        if use(doutput) and not consoleio then
                                 writeln(tab1, 'output.fp = stdout;');
-                        if use(dinput) then
+                        if use(dinput) and not consoleio then
                             begin
                                 writeln(ifdef, 'STDINIT');
                                 writeln(tab1, voidcast, '(Getx(input));');
@@ -10138,10 +10460,19 @@ var     conflag,
                         increment;
                         elabel(tp);
                         estmt(tp^.tsubstmt);
+                        if consoleio then
+                            begin
+                                indent;
+                                writeln('PtcFlush();')
+                            end;
                         indent;
-                        writeln('exit(0);');
-                        indent;
-                        writeln('/', '* NOTREACHED *', '/');
+                        if minimal then
+                                writeln('return 0;')
+                        else begin
+                                writeln('exit(0);');
+                                indent;
+                                writeln('/', '* NOTREACHED *', '/')
+                             end;
                         decrement;
                         writeln('}');
                         edconst(tp^.tsubconst);
@@ -10699,9 +11030,16 @@ begin   (* emit *)
                 writeln('Caseerror(n)');
                 writeln(tab1, inttyp, tab1, 'n;');
                 writeln('{');
-                writeln(tab1, voidcast,
-                        'fprintf(stderr, "Missing case limb: line %d\n", n);');
-                writeln(tab1, 'exit(1);');
+                if minimal then
+                    begin
+                        writeln(tab1, '(void)n;');
+                        writeln(tab1, 'PtcFail(3);')
+                    end
+                else begin
+                        writeln(tab1, voidcast,
+                                'fprintf(stderr, "Missing case limb: line %d\n", n);');
+                        writeln(tab1, 'exit(1);')
+                     end;
                 writeln(tab1, '/', '* NOTREACHED *', '/');
                 writeln('}')
             end;
@@ -10956,6 +11294,8 @@ begin   (* initialize *)
         usescpy := false;
         usefopn := false;
         usescan := false;
+        usestrcopy := false;
+        usealignstrings := false;
         usegetl := false;
 
         usecase := false;
@@ -11205,7 +11545,7 @@ begin   (* initialize *)
         deftab[dboolean]^.tbind^.tscalid := deftab[dfalse];
         deftab[dfalse]^.tnext := deftab[dtrue];
         currsym.st := sinteger;
-        currsym.vint := maxint;
+        currsym.vint := targetmaxint;
         deftab[dmaxint]^.tbind := mklit;
         deftab[dargc]^.tbind := deftab[dinteger]^.tbind;
         deftab[dinput]^.tbind := deftab[dtext]^.tbind;
@@ -11292,9 +11632,20 @@ begin   (* initialize *)
         nmachdefs := 0;
         defmach(0,              255,            'unsigned char   '); (* CPU *)
         defmach(-128,           127,            'signed char     '); (* CPU *)
-        defmach(0,              65535,          'unsigned short  '); (* CPU *)
-        defmach(-32768,         32767,          'short           '); (* CPU *)
-        defmach(-2147483647,    2147483647,     'int             '); (* CPU *)
+        if target16 then
+            begin
+                (* OSDK uses an 8-bit short; use native int for 16 bits. *)
+                defmach(0,      65535,          'unsigned int    ');
+                defmach(-32768, 32767,          'int             ')
+            end
+        else begin
+                defmach(0,      65535,          'unsigned short  ');
+                defmach(-32768, 32767,          'short           ')
+             end;
+        if target16 then
+                defmach(-2147483647, 2147483647, 'long            ')
+        else
+                defmach(-2147483647, 2147483647, 'int             '); (* CPU *)
 {       defmach(0,              4294967295,     'unsigned long   ');}(* CPU *)
 end;    (* initialize *)
 
@@ -11321,10 +11672,41 @@ end;
 
 begin   (* program *)
         runtimechecks := false;
-        if argc > 1 then
+        minimal := false;
+        externalchecks := false;
+        target16 := false;
+        consoleio := false;
+        targetmaxint := maxint;
+        for argi := 1 to argc - 1 do
             begin
-                argv(1, argbuf);
-                runtimechecks := (argbuf[1] = '-') and (argbuf[2] = 'r')
+                argv(argi, argbuf);
+                if (argbuf[1] = '-') and (argbuf[3] = ' ') and
+                   (argbuf[2] in ['r', 'm', 'e', 'c']) then
+                    begin
+                        if argbuf[2] = 'r' then runtimechecks := true;
+                        if argbuf[2] = 'm' then minimal := true;
+                        if argbuf[2] = 'c' then
+                            begin
+                                consoleio := true;
+                                minimal := true
+                            end;
+                        if argbuf[2] = 'e' then
+                            begin
+                                runtimechecks := true;
+                                externalchecks := true
+                            end
+                    end
+                else if (argbuf[1] = '-') and (argbuf[2] = 'i') and
+                        (argbuf[3] = '1') and (argbuf[4] = '6') and
+                        (argbuf[5] = ' ') then
+                    begin
+                        target16 := true;
+                        targetmaxint := 32767
+                    end
+                else begin
+                        message('Usage: ptc [-r] [-e] [-m] [-c] [-i16] < source.p > source.c');
+                        exit(1)
+                     end
             end;
         initialize;
         if echo then
@@ -11341,4 +11723,3 @@ begin   (* program *)
 9999:
         (* the very *)
 end.
-

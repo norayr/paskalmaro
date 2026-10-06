@@ -1,7 +1,7 @@
 CC      ?= cc
 CFLAGS  ?= -std=c89
 
-.PHONY: all bootstrap update-bootstrap verify test clean
+.PHONY: all bootstrap update-bootstrap verify test check clean
 
 all: verify
 
@@ -15,10 +15,12 @@ update-bootstrap:
 	./ptc-stage0 < modified/ptc.p > ptc-stage1.c
 	$(CC) $(CFLAGS) -x c -o ptc-stage1 - < ptc-stage1.c
 	./ptc-stage1 < modified/ptc.p > ptc-stage2.c
-	cmp ptc-stage1.c ptc-stage2.c
-	cp ptc-stage1.c generated/ptc.c
+	$(CC) $(CFLAGS) -x c -o ptc-stage2 - < ptc-stage2.c
+	./ptc-stage2 < modified/ptc.p > ptc-stage3.c
+	cmp ptc-stage2.c ptc-stage3.c
+	cp ptc-stage2.c generated/ptc.c
 	$(CC) $(CFLAGS) -x c -o ptc - < generated/ptc.c
-	rm -f ptc-stage0 ptc-stage1 ptc-stage1.c ptc-stage2.c
+	rm -f ptc-stage0 ptc-stage1 ptc-stage2 ptc-stage1.c ptc-stage2.c ptc-stage3.c
 
 # Verify that the checked-in C source is the fixed point of modified/ptc.p.
 verify:
@@ -35,10 +37,15 @@ test: bootstrap
 	$(CC) $(CFLAGS) -o test test.c
 	./test
 
+check: verify
+	$(MAKE) test
+	sh tests/run.sh
+	$(MAKE) -C tests/runtime all portable
+	CC='$(CC)' python3 tests/console/run.py
+	CC='$(CC)' python3 tests/examples.py
+
 clean:
 	rm -f \
 		ptc ptc-new ptc-new.c \
-		ptc-stage0 ptc-stage1 ptc-stage1.c ptc-stage2.c \
+		ptc-stage0 ptc-stage1 ptc-stage2 ptc-stage1.c ptc-stage2.c ptc-stage3.c \
 		test test.c
-
-

@@ -1,6 +1,6 @@
 CC      ?= cc
 CFLAGS  ?= -std=c89
-PTC     ?= ../../../ptc
+PTC     ?= ../../ptc
 
 .PHONY: all clean
 

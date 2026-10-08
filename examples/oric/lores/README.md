@@ -79,6 +79,52 @@ Host preprocessing uses `-nostdinc`: Linux's C headers describe the wrong target
 and must not be passed to the 6502 compiler. The bridge needs no OSDK headers
 because it uses only a no-argument function and memory access.
 
+### Loading without autorun and starting with BASIC CALL
+
+The Makefile creates `demo-osdk.tap` with automatic execution enabled (`-a1`).
+To load the machine code and return to the BASIC prompt instead, use the OSDK
+`header` tool's `-a0` option. After building the OSDK demo, run this from the
+repository root:
+
+```sh
+header -nLORES -a0 -b1 \
+    examples/oric/lores/demo-osdk.bin \
+    examples/oric/lores/demo-osdk-manual.tap \
+    0x600
+```
+
+Load `demo-osdk-manual.tap` on the Oric with:
+
+```basic
+CLOAD "LORES"
+```
+
+Wait for loading to finish and BASIC to return to its prompt, then start the
+program manually:
+
+```basic
+CALL 1536
+```
+
+The entry/load address is `$0600`, or **1536 decimal**. The tape header stores
+the start and end addresses, which `CLOAD` uses to place the program in memory.
+`-b1` identifies the file as machine code; `-a0` disables autorun. The manual
+variant has the same program payload and load address as the autorun variant.
+
+If you build with a different `OSDKADDR`, supply that same address to `header`
+and use its decimal equivalent in `CALL`. Changing only the tape header does
+not relocate the assembled program.
+
+In the standard OSDK batch build, the equivalent configuration is:
+
+```bat
+SET OSDKADDR=$600
+SET OSDKHEAD=-a0
+```
+
+This example's Linux Makefile explicitly passes `-a1`; it does not read
+`OSDKHEAD`. Use the standalone `header` command above for the manual-start tape.
+
 ## Representation and separate compilation
 
 Use the same translator options for both Pascal files. `-i16` selects native
